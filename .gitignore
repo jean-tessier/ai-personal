@@ -1,0 +1,19 @@
+# Secrets & keys
+.env
+.env.*
+*.secret
+*.pem
+keys/
+secrets/
+
+# macOS
+.DS_Store
+
+# Generated artifacts
+catalog.json
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
