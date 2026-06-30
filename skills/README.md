@@ -32,3 +32,9 @@ description: One sentence — when to use this skill and what it produces.
 
 The `description` field is consumed by `scripts/catalog.sh` and surfaced
 in the catalog. Keep it under 120 characters.
+
+## Available skills
+
+| Skill | Description |
+|-------|-------------|
+| [atomic-commits](atomic-commits/SKILL.md) | Generate clean, atomic git commits from working changes with meaningful messages that explain *why*, not just *what*. |
