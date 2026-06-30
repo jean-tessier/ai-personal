@@ -9,9 +9,6 @@ secrets/
 # macOS
 .DS_Store
 
-# Generated artifacts
-catalog.json
-
 # Editors
 .idea/
 .vscode/
