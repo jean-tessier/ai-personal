@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// @ts-nocheck -- copy-and-adapt template; this repo has no Node/TS toolchain
+// to supply @types/node, and the target project this gets copied into will.
 // aggregate.ts — starting-point template for scratch-script (Tier 2).
 // Copy into ./scratch/, rename, and adapt: read whatever inputs the task
 // needs, do the aggregation/join, write JSON or Markdown to stdout (or a
