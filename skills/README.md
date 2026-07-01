@@ -38,3 +38,4 @@ in the catalog. Keep it under 120 characters.
 | Skill | Description |
 |-------|-------------|
 | [atomic-commits](atomic-commits/SKILL.md) | Generate clean, atomic git commits from working changes with meaningful messages that explain *why*, not just *what*. |
+| [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
