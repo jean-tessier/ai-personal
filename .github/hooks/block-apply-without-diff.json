@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "matcher": "terminal",
+        "command": "scripts/hook-block-apply-without-diff.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}
