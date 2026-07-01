@@ -78,4 +78,6 @@ Format: `YYYY-MM-DD · {model-version} · {what changed and why}`
 bash scripts/validate.sh          # structural lint; exits 1 on failures
 bash scripts/catalog.sh           # emits catalog JSON to stdout
 bash scripts/catalog.sh > catalog.json
+bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed via mktemp
+bash scripts/test-install-docker.sh   # same tests, fully isolated in a container
 ```

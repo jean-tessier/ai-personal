@@ -30,7 +30,29 @@ its design.
 
 `bash scripts/validate.sh` lints `scripts/harnesses.json` (valid JSON; each harness has a non-empty
 `label`, ≥1 `scopes` key, ≥1 `mapping` key). `bash -n install.sh` checks syntax. Neither runs
-`install.sh` end-to-end — for that, use the test seams below.
+`install.sh` end-to-end.
+
+For that, `bash scripts/test-install.sh` runs `install.sh` behaviorally: dry-run/actual installs
+into both scopes, `--force` skip-vs-overwrite, unknown harness/scope/category, a harness/category
+pair with no mapping, missing required flags, `-h`, the numbered-picker fallback (via
+`INSTALL_FORCE_INTERACTIVE=1`), and a regression test for the missing-`harnesses.json`
+traceback bug described below. Every test runs against a throwaway `mktemp -d` sandbox with an
+isolated `$PWD`/`$HOME`, removed via `trap ... EXIT` — nothing touches the real repo or the real
+home directory, pass or fail. `bash scripts/test-install-docker.sh` runs the same script inside a
+`--rm --network none` container for full isolation (needs Docker running).
+
+**Gotcha this uncovered**: overriding `$HOME` to sandbox the "user" scope breaks version-manager
+shims (asdf/mise/pyenv) that resolve their real interpreter via `$HOME/.tool-versions` — `python3`
+silently resolves to a broken shim instead of the real interpreter, producing confusing empty
+`_json` output that looks like a real `install.sh` bug but isn't. `test-install.sh` works around
+this by resolving the real interpreter once (`python3 -c 'import sys; print(sys.executable)'`)
+before any `$HOME` override, then symlinking it into each sandbox's own `bin/`, prepended onto
+`PATH`. Any future test harness that overrides `$HOME` needs the same workaround.
+
+It still doesn't exercise the real curl/tar network fetch — that's still the manual recipe below
+(rejected as a permanent automated test because it would require either a URL-override flag,
+already rejected as scope creep — see Task 3's decision — or hitting the real GitHub codeload
+endpoint from a test run).
 
 ## Test-seam conventions (read this before touching `install.sh`)
 

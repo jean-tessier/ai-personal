@@ -16,13 +16,18 @@ bash scripts/validate.sh          # structural lint; exits 1 on failures. Run be
 make check                        # same thing (Makefile wraps validate.sh — the single deterministic gate)
 bash scripts/catalog.sh           # emit a JSON index of every named asset to stdout
 bash scripts/catalog.sh > catalog.json
+bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed via mktemp (no disk clutter)
+bash scripts/test-install-docker.sh   # same tests, fully isolated in a container (needs Docker running)
 ```
 
-There is no unit-test framework and no `npm test`/`pytest` equivalent. `scripts/validate.sh` *is*
-the test suite: it's a structural linter (required files present, JSON well-formed, naming
-conventions followed), not a behavioral one. Behavioral drift for a specific prompt/skill is
-covered by `evals/{agents,skills,tasks}/{name}/cases.yaml` (mirrors the `prompts/`/`skills/` tree
-exactly) — but no eval-runner script exists yet; `cases.yaml` is a data format only.
+There is no general unit-test framework and no `npm test`/`pytest` equivalent. `scripts/validate.sh`
+is a structural linter (required files present, JSON well-formed, naming conventions followed), not
+a behavioral one. `scripts/test-install.sh` is the one behavioral exception: it runs `install.sh`
+end-to-end against throwaway `mktemp` sandboxes (isolated `$PWD`/`$HOME`, cleaned up via `trap` on
+exit) using `install.sh`'s own test seams (`--local`, `INSTALL_FORCE_INTERACTIVE`) — see
+`docs/memory/vendor-agnostic-installer.md`. Behavioral drift for a specific prompt/skill is covered
+by `evals/{agents,skills,tasks}/{name}/cases.yaml` (mirrors the `prompts/`/`skills/` tree exactly) —
+but no eval-runner script exists yet; `cases.yaml` is a data format only.
 
 Installer (see Architecture below):
 
