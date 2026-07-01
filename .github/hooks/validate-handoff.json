@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "type": "command",
+        "matcher": "edit_file",
+        "command": "scripts/validate-handoff.sh",
+        "timeout": 10
+      }
+    ]
+  }
+}
