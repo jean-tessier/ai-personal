@@ -1,6 +1,7 @@
 # ai-personal
 
-Personal AI asset monorepo.
+Personal monorepo of reusable Claude Code assets — prompts, skills, workflows, tools, and
+eval cases — kept in one place with consistent structure and conventions.
 
 ## Directory map
 
@@ -10,13 +11,13 @@ Personal AI asset monorepo.
 | `skills/` | Procedural instruction sets injected into agent context |
 | `workflows/` | Grouped, inter-referential prompt/skill collections — e.g. multi-agent orchestration systems. See [`workflows/README.md`](workflows/README.md) |
 | `tools/` | MCP server manifests and function/tool schemas |
-| `harnesses/` | Per-harness customisation and extension config |
 | `evals/` | Eval cases — mirrors the `prompts/` and `skills/` tree exactly |
 | `scripts/` | Catalog generation and structural validation |
 
 ## Key conventions
 
-- Every named asset (skill, agent, task) lives in its own subdirectory.
+- Skills and agent prompts live in their own subdirectory; task prompts are flat files
+  under `prompts/tasks/`, promoted to a subdirectory only when they need `examples/`.
 - Skills and agent prompts carry a `CHANGELOG.md` to track drift across model versions.
 - `_shared/` directories hold composable fragments not directly invocable as standalone assets.
 - Prompts/skills that only function as a group (e.g. a multi-agent orchestration system) live under `workflows/{name}/`, not as separate flat assets.

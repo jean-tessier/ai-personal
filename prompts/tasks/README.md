@@ -5,6 +5,8 @@ One-shot task prompts. Each file is a standalone Markdown document.
 ## Naming
 
 Kebab-case: `extract-entities.md`, `summarise-doc.md`, `rewrite-email.md`.
+The stem is the task's canonical identifier — it must match the corresponding
+`evals/tasks/{name}/` path.
 
 ## Frontmatter
 

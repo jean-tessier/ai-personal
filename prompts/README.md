@@ -15,6 +15,8 @@ Standing context for a named agent. Minimum contents:
 └── examples/       # Representative input/output pairs
 ```
 
+See [`agents/README.md`](agents/README.md) for naming rules and the CHANGELOG.md format.
+
 ### `tasks/{name}.md`
 One-shot task prompts. No dedicated directory unless examples are needed.
 Add YAML frontmatter:
@@ -22,10 +24,13 @@ Add YAML frontmatter:
 ```yaml
 ---
 name: extract-entities
-description: Extract named entities from unstructured text.
+description: Extract named entities from unstructured text and return structured JSON.
 output: "JSON array: [{ entity, type, confidence }]"
+model_notes: "Works well with claude-sonnet-4-5+; requires extended thinking for complex docs."
 ---
 ```
+
+See [`tasks/README.md`](tasks/README.md) for naming rules and the `examples/` pattern.
 
 ### `_shared/`
 Composable fragments included by reference. Not standalone assets.
@@ -35,3 +40,5 @@ Composable fragments included by reference. Not standalone assets.
 | `personas/` | Role and voice definitions |
 | `output-formats/` | Format contracts (JSON schemas, markdown templates, etc.) |
 | `reasoning-modes/` | Chain-of-thought scaffolds, self-critique loops, etc. |
+
+Currently placeholders (`.gitkeep` only) — no fragments added yet.

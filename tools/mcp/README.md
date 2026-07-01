@@ -1,6 +1,6 @@
 # tools/mcp/
 
-MCP server definitions. One subdirectory per server.
+MCP server definitions. One subdirectory per server. No servers defined yet.
 
 ## manifest.json schema
 
@@ -20,8 +20,8 @@ Only one of `url` or `command` is required.
 
 ## Referencing servers from harnesses
 
-Harness configs (e.g. `harnesses/claude-ai/projects/{name}/mcp-servers.json`)
-reference servers by pointing to this manifest, not by duplicating it:
+Harness configs reference servers by pointing to this manifest, not by
+duplicating it:
 
 ```json
 [{ "name": "display-name", "ref": "tools/mcp/{server-name}/manifest.json" }]

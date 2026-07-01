@@ -1,6 +1,7 @@
 # evals/
 
-Evaluation suites for prompts and skills.
+Evaluation suites for prompts and skills, used to catch behavioural drift when a
+system prompt, task prompt, or skill changes.
 Tree structure mirrors `prompts/` and `skills/` exactly:
 
 ```
@@ -10,7 +11,7 @@ evals/
 └── tasks/{task-name}/cases.yaml
 ```
 
-Finding the eval for `skills/docx/` → `evals/skills/docx/cases.yaml`.
+Finding the eval for `skills/atomic-commits/` → `evals/skills/atomic-commits/cases.yaml`.
 No slug translation required.
 
 ## cases.yaml format

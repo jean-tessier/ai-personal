@@ -21,15 +21,26 @@ belongs in `workflows/`, not scattered across `prompts/agents/` or `skills/`.
 ```
 {workflow-name}/
 ├── README.md       # What the workflow does, the role of each component, the entry point
-└── agents/         # Grouped prompt files (or skills/, if the components are skills)
+└── agents/         # Grouped prompt files, numbered in read/dispatch order
     ├── 00-....md
     ├── 01-....md
     └── ...
 ```
 
-Grouped files live inside a component subdirectory (commonly `agents/`, but `skills/`
-for a skill-grouped workflow) — never loose at the workflow's top level — so
-`scripts/validate.sh` can tell a real group from an empty placeholder.
+or, when the components are skills, one subdirectory per skill — same shape as
+`skills/{name}/`:
+
+```
+{workflow-name}/
+├── README.md
+├── {skill-a}/
+│   └── SKILL.md
+└── {skill-b}/
+    └── SKILL.md
+```
+
+Grouped files live inside a component subdirectory — never loose at the workflow's
+top level — so `scripts/validate.sh` can tell a real group from an empty placeholder.
 
 ## Naming
 
