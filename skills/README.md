@@ -41,3 +41,4 @@ in the catalog. Keep it under 120 characters.
 | [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
 | [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's or agent prompt's CHANGELOG.md |
 | [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
+| [readme-maintenance](readme-maintenance/SKILL.md) | Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace |
