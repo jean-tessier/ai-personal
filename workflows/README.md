@@ -22,6 +22,7 @@ belongs in `workflows/`, not scattered across `prompts/agents/` or `skills/`.
 ```
 {workflow-name}/
 ├── README.md       # What the workflow does, the role of each component, the entry point
+├── USAGE.md        # How to invoke it: step-by-step guidance and a worked example
 └── agents/         # Grouped prompt files, numbered in read/dispatch order
     ├── 00-....md
     ├── 01-....md
@@ -34,6 +35,7 @@ or, when the components are skills, one subdirectory per skill — same shape as
 ```
 {workflow-name}/
 ├── README.md
+├── USAGE.md
 ├── {skill-a}/
 │   └── SKILL.md
 └── {skill-b}/
