@@ -25,6 +25,14 @@ yaml_val() {
     | sed "s/['\"]//g"
 }
 
+# Extract first non-empty value of a flat JSON string key
+json_val() {
+  local file="$1" key="$2"
+  grep "\"${key}\"" "$file" 2>/dev/null \
+    | head -1 \
+    | sed -E "s/.*\"${key}\"[[:space:]]*:[[:space:]]*\"?([^\",}]*)\"?.*/\1/"
+}
+
 # ── Skills ────────────────────────────────────────────────────────────────────
 skills_json=""
 while IFS= read -r -d '' dir; do
@@ -37,6 +45,34 @@ while IFS= read -r -d '' dir; do
     "$(has_file "$dir/CHANGELOG.md")" "$(has_dir "$dir/examples")")"
   skills_json="${skills_json:+$skills_json,}$entry"
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+
+# ── Packs ─────────────────────────────────────────────────────────────────────
+packs_json=""
+while IFS= read -r -d '' dir; do
+  name="$(basename "$dir")"
+  [[ "$name" == _* ]] && continue
+  manifest="$dir/.claude-plugin/plugin.json"
+  desc=""; version=""
+  if [[ -f "$manifest" ]]; then
+    desc="$(json_val "$manifest" description)"
+    version="$(json_val "$manifest" version)"
+  fi
+  pack_skills_json=""
+  while IFS= read -r -d '' sdir; do
+    sname="$(basename "$sdir")"
+    [[ "$sname" == _* ]] && continue
+    sdesc=""
+    [[ -f "$sdir/SKILL.md" ]] && sdesc="$(yaml_val "$sdir/SKILL.md" description)"
+    sentry="$(printf '{"name":"%s","description":"%s","hasChangelog":%s,"hasExamples":%s}' \
+      "$(quote "$sname")" "$(quote "$sdesc")" \
+      "$(has_file "$sdir/CHANGELOG.md")" "$(has_dir "$sdir/examples")")"
+    pack_skills_json="${pack_skills_json:+$pack_skills_json,}$sentry"
+  done < <(find "$dir/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+  entry="$(printf '{"name":"%s","path":"packs/%s","description":"%s","version":"%s","hasManifest":%s,"skills":[%s]}' \
+    "$(quote "$name")" "$(quote "$name")" "$(quote "$desc")" "$(quote "$version")" \
+    "$(has_file "$manifest")" "$pack_skills_json")"
+  packs_json="${packs_json:+$packs_json,}$entry"
+done < <(find "$REPO/packs" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
 # ── Agents ────────────────────────────────────────────────────────────────────
 agents_json=""
@@ -90,6 +126,7 @@ cat <<JSON
   "generated": "$timestamp",
   "assets": {
     "skills": [$skills_json],
+    "packs": [$packs_json],
     "agents": [$agents_json],
     "workflows": [$workflows_json],
     "tasks":  [$tasks_json],

@@ -11,6 +11,7 @@ together — as distinct from the single, independently-invocable assets in
 | Agent prompt | `prompts/agents/{name}/` | Yes |
 | Task prompt | `prompts/tasks/{name}.md` | Yes |
 | Skill | `skills/{name}/` | Yes |
+| Skill pack | `packs/{pack-name}/skills/{name}/` | Yes, per skill — bundled for distribution as one plugin, not for coupling |
 | Orchestration system | `workflows/{name}/` | No — components reference each other and are deployed as a set |
 
 If moving, renaming, or deleting one file would break others in the set, the set

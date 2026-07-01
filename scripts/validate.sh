@@ -43,6 +43,40 @@ while IFS= read -r -d '' dir; do
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $skill_count -eq 0 ]] && printf "  (no skills yet)\n"
 
+# ── Packs ─────────────────────────────────────────────────────────────────────
+_head "packs"
+pack_count=0
+while IFS= read -r -d '' dir; do
+  name="$(basename "$dir")"
+  [[ "$name" == _* ]] && continue
+  ((pack_count++)) || true
+
+  manifest="$dir/.claude-plugin/plugin.json"
+  if [[ -f "$manifest" ]]; then
+    if validate_json "$manifest"; then _ok "packs/$name/.claude-plugin/plugin.json"
+    else _fail "packs/$name/.claude-plugin/plugin.json — invalid JSON"; fi
+  else
+    _fail "packs/$name/.claude-plugin/plugin.json — required file missing"
+  fi
+
+  if [[ -f "$dir/README.md" ]]; then _ok "packs/$name/README.md"
+  else _fail "packs/$name/README.md — required file missing"; fi
+
+  pack_skill_count=0
+  while IFS= read -r -d '' sdir; do
+    sname="$(basename "$sdir")"
+    [[ "$sname" == _* ]] && continue
+    ((pack_skill_count++)) || true
+    if [[ -f "$sdir/SKILL.md" ]]; then _ok "packs/$name/skills/$sname/SKILL.md"
+    else _fail "packs/$name/skills/$sname/SKILL.md — required file missing"; fi
+
+    if [[ -f "$sdir/CHANGELOG.md" ]]; then _ok "packs/$name/skills/$sname/CHANGELOG.md"
+    else _warn "packs/$name/skills/$sname/CHANGELOG.md — no version log yet"; fi
+  done < <(find "$dir/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+  [[ $pack_skill_count -eq 0 ]] && _fail "packs/$name/skills/ — no skills found in pack"
+done < <(find "$REPO/packs" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+[[ $pack_count -eq 0 ]] && printf "  (no packs yet)\n"
+
 # ── Agents ────────────────────────────────────────────────────────────────────
 _head "prompts/agents"
 agent_count=0
