@@ -136,6 +136,51 @@ while IFS= read -r -d '' file; do
 done < <(find "$REPO/tools/functions" -name "*.json" -print0 2>/dev/null | sort -z)
 [[ $fn_count -eq 0 ]] && printf "  (no function schemas yet)\n"
 
+# ── Harnesses ─────────────────────────────────────────────────────────────────
+_head "harnesses"
+harnesses_count=0
+harnesses_file="$REPO/scripts/harnesses.json"
+if [[ -f "$harnesses_file" ]]; then
+  if validate_json "$harnesses_file"; then
+    _ok "scripts/harnesses.json"
+    if command -v python3 &>/dev/null; then
+      while IFS=$'\t' read -r name label_ok scopes_n mapping_n; do
+        ((harnesses_count++)) || true
+        if [[ "$label_ok" == "1" ]]; then _ok "harnesses.$name.label"
+        else _fail "harnesses.$name.label — missing or empty string"; fi
+
+        if [[ "$scopes_n" -gt 0 ]]; then _ok "harnesses.$name.scopes ($scopes_n)"
+        else _fail "harnesses.$name.scopes — missing or empty object"; fi
+
+        if [[ "$mapping_n" -gt 0 ]]; then _ok "harnesses.$name.mapping ($mapping_n)"
+        else _fail "harnesses.$name.mapping — missing or empty object"; fi
+      done < <(python3 - "$harnesses_file" <<'PY'
+import json, sys
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+for name, h in sorted(data.items()):
+    label = h.get("label")
+    label_ok = 1 if isinstance(label, str) and label.strip() else 0
+    scopes = h.get("scopes")
+    mapping = h.get("mapping")
+    scopes_n = len(scopes) if isinstance(scopes, dict) else 0
+    mapping_n = len(mapping) if isinstance(mapping, dict) else 0
+    print(f"{name}\t{label_ok}\t{scopes_n}\t{mapping_n}")
+PY
+)
+    else
+      _warn "python3 not found; skipping per-harness structural checks"
+    fi
+  else
+    _fail "scripts/harnesses.json — invalid JSON"
+  fi
+else
+  _fail "scripts/harnesses.json — required file missing"
+fi
+[[ $harnesses_count -eq 0 ]] && printf "  (no harnesses yet)\n"
+
 # ── Eval / prompt alignment ───────────────────────────────────────────────────
 _head "evals alignment"
 while IFS= read -r -d '' dir; do
