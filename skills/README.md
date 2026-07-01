@@ -40,3 +40,4 @@ in the catalog. Keep it under 120 characters.
 | [atomic-commits](atomic-commits/SKILL.md) | Generate clean, atomic git commits from working changes with meaningful messages that explain *why*, not just *what*. |
 | [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
 | [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's or agent prompt's CHANGELOG.md |
+| [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
