@@ -8,6 +8,7 @@ Personal AI asset monorepo.
 |------|----------|
 | `prompts/` | Agent system prompts, one-shot task prompts, reusable shared fragments |
 | `skills/` | Procedural instruction sets injected into agent context |
+| `workflows/` | Grouped, inter-referential prompt/skill collections — e.g. multi-agent orchestration systems. See [`workflows/README.md`](workflows/README.md) |
 | `tools/` | MCP server manifests and function/tool schemas |
 | `harnesses/` | Per-harness customisation and extension config |
 | `evals/` | Eval cases — mirrors the `prompts/` and `skills/` tree exactly |
@@ -18,6 +19,7 @@ Personal AI asset monorepo.
 - Every named asset (skill, agent, task) lives in its own subdirectory.
 - Skills and agent prompts carry a `CHANGELOG.md` to track drift across model versions.
 - `_shared/` directories hold composable fragments not directly invocable as standalone assets.
+- Prompts/skills that only function as a group (e.g. a multi-agent orchestration system) live under `workflows/{name}/`, not as separate flat assets.
 - Run `bash scripts/catalog.sh > catalog.json` to regenerate the asset index.
 - Run `bash scripts/validate.sh` before committing.
 

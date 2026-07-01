@@ -49,6 +49,21 @@ while IFS= read -r -d '' dir; do
   agents_json="${agents_json:+$agents_json,}$entry"
 done < <(find "$REPO/prompts/agents" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
+# ── Workflows ─────────────────────────────────────────────────────────────────
+workflows_json=""
+while IFS= read -r -d '' dir; do
+  name="$(basename "$dir")"
+  [[ "$name" == _* ]] && continue
+  files_json=""
+  while IFS= read -r -d '' f; do
+    rel="${f#"$dir"/}"
+    files_json="${files_json:+$files_json,}\"$(quote "$rel")\""
+  done < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null | sort -z)
+  entry="$(printf '{"name":"%s","path":"workflows/%s","hasReadme":%s,"files":[%s]}' \
+    "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json")"
+  workflows_json="${workflows_json:+$workflows_json,}$entry"
+done < <(find "$REPO/workflows" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 tasks_json=""
 while IFS= read -r -d '' file; do
@@ -76,6 +91,7 @@ cat <<JSON
   "assets": {
     "skills": [$skills_json],
     "agents": [$agents_json],
+    "workflows": [$workflows_json],
     "tasks":  [$tasks_json],
     "tools": {
       "mcp": [$mcp_json]

@@ -1,6 +1,10 @@
 # prompts/agents/
 
-Each subdirectory is a named agent configuration.
+Each subdirectory is a named agent configuration, independently invocable on its own.
+
+For agent prompts that are *not* independently invocable — that reference each other
+and only function as a group, e.g. a multi-agent orchestration system — see
+[`workflows/`](../../workflows/README.md) instead.
 
 ## Naming
 
