@@ -15,6 +15,37 @@ eval cases — kept in one place with consistent structure and conventions.
 | `evals/` | Eval cases — mirrors the `prompts/` and `skills/` tree exactly |
 | `scripts/` | Catalog generation and structural validation |
 
+## Installing
+
+Fetch assets into another project with `install.sh`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/install.sh \
+  | bash -s -- --harness claude-code --scope project
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--harness <key>` | harness key from `scripts/harnesses.json` (required) |
+| `--scope <key>` | scope key declared for that harness (required) |
+| `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
+| `--dry-run` | print planned copy operations; write nothing |
+| `--force` | overwrite existing destination files/dirs (default: skip existing) |
+| `-h`, `--help` | show usage |
+
+Harness/scope keys come from `scripts/harnesses.json`:
+
+| Harness | Scopes |
+|---------|--------|
+| `claude-code` | `project` → `.claude`, `user` → `~/.claude` |
+| `copilot` | `project` → `.github` (no `user` scope) |
+
+`copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`.
+
+Omitting `--assets` in a real terminal launches a picker per category (fzf → gum → numbered
+prompt, whichever is available) instead of installing everything. Piped runs (`curl | bash`)
+have no TTY on stdin, so they skip the picker and install every category.
+
 ## Key conventions
 
 - Skills and agent prompts live in their own subdirectory; task prompts are flat files
