@@ -1,0 +1,42 @@
+# workflows/
+
+Grouped collections of inter-referential prompts and/or skills that only function
+together — as distinct from the single, independently-invocable assets in
+`prompts/agents/`, `prompts/tasks/`, and `skills/`.
+
+## When to use `workflows/`
+
+| Asset | Lives in | Invocable alone? |
+|---|---|---|
+| Agent prompt | `prompts/agents/{name}/` | Yes |
+| Task prompt | `prompts/tasks/{name}.md` | Yes |
+| Skill | `skills/{name}/` | Yes |
+| Orchestration system | `workflows/{name}/` | No — components reference each other and are deployed as a set |
+
+If moving, renaming, or deleting one file would break others in the set, the set
+belongs in `workflows/`, not scattered across `prompts/agents/` or `skills/`.
+
+## Structure per workflow
+
+```
+{workflow-name}/
+├── README.md       # What the workflow does, the role of each component, the entry point
+└── agents/         # Grouped prompt files (or skills/, if the components are skills)
+    ├── 00-....md
+    ├── 01-....md
+    └── ...
+```
+
+Grouped files live inside a component subdirectory (commonly `agents/`, but `skills/`
+for a skill-grouped workflow) — never loose at the workflow's top level — so
+`scripts/validate.sh` can tell a real group from an empty placeholder.
+
+## Naming
+
+Kebab-case, describing the orchestration pattern: `hub-and-spoke-orchestration`.
+
+## Available workflows
+
+| Workflow | Description |
+|---|---|
+| [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol. |
