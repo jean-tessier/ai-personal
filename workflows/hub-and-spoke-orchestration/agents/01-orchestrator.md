@@ -1,11 +1,11 @@
 ---
 name: orchestrator
-description: Owns the loop counter and routes every agent by its emitted status; invokes the merge gate on green; escalates to the Arbiter on k-trip.
+description: Owns the loop counter and routes every agent by its emitted status; invokes the merge gate on green; escalates to the Arbiter on k-trip
 model: claude-sonnet-5
-tools: ["dispatch-agent", "merge-gate"]
-agents: ["planner", "explorer", "coder", "executor", "reviewer", "arbiter", "scribe"]
+tools: [dispatch-agent, merge-gate]
+agents: [planner, explorer, coder, executor, reviewer, arbiter, scribe]
 user-invocable: true
-argument-hint: Goal statement, repo pointer, trunk ref, config (k-trip threshold and dispatch cap); receives worker results keyed by status and routes deterministically.
+argument-hint: Goal statement, repo pointer, trunk ref, config (k-trip threshold and dispatch cap); receives worker results keyed by status and routes deterministically
 disable-model-invocation: true
 ---
 

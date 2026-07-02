@@ -2,8 +2,8 @@
 name: reviewer
 description: Gate a branch through coverage hunt and quality review; judge results and emit findings without running code
 model: claude-sonnet-5
-tools: ["read", "grep"]
-agents: ["scribe"]
+tools: [read, grep]
+agents: [scribe]
 user-invocable: false
 argument-hint: Receives branch name, diff, base_ref, node acceptance_criteria, approach pointer, optional findings_refs; on resume after REVIEW_NEEDS_RUN receives prior Executor run_results to judge
 disable-model-invocation: true

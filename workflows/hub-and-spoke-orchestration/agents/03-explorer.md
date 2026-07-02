@@ -1,11 +1,11 @@
 ---
 name: explorer
-description: Read-only investigation over the codebase; answers specific questions with provenance-tagged findings.
+description: Read-only investigation over the codebase; answers specific questions with provenance-tagged findings
 model: claude-sonnet-5
 tools: [read, grep, glob]
 agents: [scribe]
 user-invocable: false
-argument-hint: Dispatched with specific questions about codebase facts, repo pointer, and base_ref (commit/branch) to anchor findings.
+argument-hint: Dispatched with specific questions about codebase facts, repo pointer, and base_ref (commit/branch) to anchor findings
 disable-model-invocation: true
 ---
 

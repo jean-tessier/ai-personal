@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Implements assigned task-DAG nodes on a branch. Cannot merge to trunk.
+description: Implements assigned task-DAG nodes on a branch. Cannot merge to trunk
 model: claude-sonnet-5
 tools: [read, edit, write, bash]
 agents: [scribe]
