@@ -26,12 +26,15 @@ ai-personal/
 ├── tools/, evals/
 └── workflows/                ← THIS workspace: sets that only work together
     ├── handoff-workflow/                 (skill-set: one dir per skill)
-    └── hub-and-spoke-orchestration/      (agent-set: numbered prompt files)
+    ├── hub-and-spoke-orchestration/      (agent-set: numbered prompt files)
+    └── tiered-escalation-suite/          (Copilot/VS Code drop-in: .github/, .vscode/, scripts/, Makefile)
 ```
 
-Both workflows in this workspace produce/consume files in a **target project** (the
-repo you're actually working in), not inside `ai-personal` itself — `workflows/`
-holds the reusable instructions, not the output artifacts.
+The first two workflows in this workspace produce/consume files in a **target project**
+(the repo you're actually working in), not inside `ai-personal` itself — `workflows/`
+holds the reusable instructions, not the output artifacts. `tiered-escalation-suite` is
+different again: its payload is *copied wholesale* into a target project's root and
+never read in place by Claude Code (it's Copilot/VS Code-native).
 
 ## Asset index
 
@@ -39,5 +42,6 @@ holds the reusable instructions, not the output artifacts.
 |---|---|---|
 | [handoff-workflow](handoff-workflow/README.md) | Skill-set that carries multi-session work forward via `handoff.md`, then retires completed work into ADRs, `docs/memory/`, and a dated archive. | [USAGE.md](handoff-workflow/USAGE.md) |
 | [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Agent-prompt set for an unattended multi-agent pipeline (Orchestrator hub + Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes + Scribe write-path) that plans, implements, reviews, and merges a change to trunk. | [USAGE.md](hub-and-spoke-orchestration/USAGE.md) |
+| [tiered-escalation-suite](tiered-escalation-suite/README.md) | Capability-scoped GitHub Copilot/VS Code agent suite — read-only Surveyor / diff-gated Transformer peers plus a Verifier gate, hard-enforced via hooks and scripts rather than prose. Deploy-and-open, not dispatch-a-prompt. | [USAGE.md](tiered-escalation-suite/USAGE.md) |
 
-Both are populated (no empty/placeholder workflows currently exist in this workspace).
+All three are populated (no empty/placeholder workflows currently exist in this workspace).
