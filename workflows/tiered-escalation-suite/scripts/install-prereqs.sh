@@ -56,9 +56,20 @@ case "$mgr" in
     elif have snap;  then run sudo snap install tokei
     else echo "note: install tokei via cargo or snap (neither found)"; fi
     if ! have comby; then
-      echo "+ installing comby via get.comby.dev"
-      [ "$dry" -eq 1 ] || bash <(curl -sL get.comby.dev) \
-        || echo "note: comby install failed — run under WSL/Linux or install manually"
+      cv=1.8.1 ct="comby-${cv}-x86_64-linux.tar.gz"
+      csum=ec0ca6477822154d71033e0b0a724c23a0608b99028ecab492bc9876ae8c458a
+      echo "+ installing comby ${cv} (pinned, sha256-verified)"
+      if [ "$dry" -ne 1 ]; then
+        t=$(mktemp -d)
+        if curl -fsSL -o "$t/$ct" "https://github.com/comby-tools/comby/releases/download/${cv}/${ct}" \
+             && echo "$csum  $t/$ct" | sha256sum -c - \
+             && tar -xzf "$t/$ct" -C "$t"; then
+          sudo install -m 755 "$t/comby-${cv}-x86_64-linux" /usr/local/bin/comby
+        else
+          echo "note: comby install failed (download/checksum mismatch) — install manually from https://github.com/comby-tools/comby/releases"
+        fi
+        rm -rf "$t"
+      fi
     fi
     ;;
 esac
