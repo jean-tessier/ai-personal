@@ -55,3 +55,4 @@ Kebab-case, describing the orchestration pattern: `hub-and-spoke-orchestration`.
 |---|---|
 | [handoff-workflow](handoff-workflow/README.md) | Multi-session work loop: `handoff.md` carries state between sessions via `resume-handoff`/`handoff-document`, then `ingest-handoff` retires a completed handoff into ADRs, `docs/memory/`, and the handoff archive. |
 | [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol. |
+| [tiered-escalation-suite](tiered-escalation-suite/README.md) | Capability-scoped GitHub Copilot/VS Code agent suite (Surveyor/Transformer peers + Verifier gate), a drop-in `.github/`/`.vscode`/`scripts`/`Makefile` payload for a *target* project, not read in place by Claude Code. |

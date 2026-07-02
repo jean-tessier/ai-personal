@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/handoff.schema.json",
+  "title": "Orchestrator <-> subagent handoff artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task", "tier", "inputs", "outputs"],
+  "properties": {
+    "task": { "type": "string", "minLength": 1 },
+    "tier": { "type": "integer", "minimum": 0, "maximum": 3 },
+    "inputs": { "type": "object" },
+    "preconditions": { "type": "array", "items": { "type": "string" } },
+    "outputs": { "type": "object" },
+    "verify": {
+      "type": "object",
+      "properties": {
+        "make_check": { "enum": ["pass", "fail", "skipped"] },
+        "crosscheck": { "type": "object" }
+      }
+    }
+  }
+}

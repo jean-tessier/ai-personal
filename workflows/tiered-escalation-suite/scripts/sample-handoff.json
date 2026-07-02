@@ -1,0 +1,8 @@
+{
+  "task": "rename-api",
+  "tier": 1,
+  "inputs": { "from": "fetchUser", "to": "getUser", "lang": "ts" },
+  "preconditions": ["diff_shown"],
+  "outputs": { "diff_path": "./scratch/handoff/pending.diff", "callsites": 42 },
+  "verify": { "make_check": "pass", "crosscheck": { "ast_grep": 42, "rg": 42 } }
+}
