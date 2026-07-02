@@ -7,10 +7,11 @@
 # Usage: install-prereqs.sh [--java] [--web] [--dry-run] [--yes]
 set -uo pipefail
 
-want_java=0 want_web=0 dry=0 assume_yes=0
+want_java=0 want_web=0 dry=0
 for a in "$@"; do case "$a" in
   --java) want_java=1;; --web) want_web=1;;
-  --dry-run) dry=1;; --yes|-y) assume_yes=1;;
+  --dry-run) dry=1;;
+  --yes|-y) ;;  # apt-get already hard-codes -y; brew does not prompt — flag is a no-op
   -h|--help) sed -n '2,9p' "$0"; exit 0;;
   *) echo "unknown flag: $a" >&2; exit 2;;
 esac; done
