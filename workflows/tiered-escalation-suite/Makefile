@@ -4,8 +4,8 @@
 .PHONY: check check-java check-node
 
 check:
-	@[ -f pom.xml ]      && $(MAKE) check-java || true
-	@[ -f package.json ] && $(MAKE) check-node || true
+	@if [ -f pom.xml ];      then $(MAKE) check-java; fi
+	@if [ -f package.json ]; then $(MAKE) check-node; fi
 
 check-java:
 	mvn -q -B verify
