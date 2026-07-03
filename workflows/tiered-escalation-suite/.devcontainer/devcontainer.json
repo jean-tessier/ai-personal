@@ -1,0 +1,22 @@
+{
+  "name": "tiered-escalation-suite",
+  "build": {
+    "dockerfile": "Dockerfile",
+    // Build context is the repo root (not .devcontainer/) so the Dockerfile's
+    // COPY can reach scripts/install-prereqs.sh and scripts/preflight.sh.
+    "context": "..",
+    "args": {
+      // Flip to "true" if the target repo builds a Java and/or Angular/Ionic stack —
+      // mirrors scripts/install-prereqs.sh's own --java/--web flags.
+      "INSTALL_JAVA": "false",
+      "INSTALL_WEB": "false"
+    }
+  },
+  "remoteUser": "node",
+  "postCreateCommand": "bash scripts/preflight.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["GitHub.copilot", "GitHub.copilot-chat"]
+    }
+  }
+}

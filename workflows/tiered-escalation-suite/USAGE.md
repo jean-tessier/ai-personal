@@ -15,22 +15,31 @@ Code — they're Copilot-native (`.agent.md`, `.github/skills/*/SKILL.md`,
 
 1. Copy the payload into the target repo's root:
    ```bash
-   cp -R workflows/tiered-escalation-suite/.github  <target-repo>/.github
-   cp -R workflows/tiered-escalation-suite/.vscode   <target-repo>/.vscode
-   cp -R workflows/tiered-escalation-suite/scripts   <target-repo>/scripts
-   cp -R workflows/tiered-escalation-suite/scratch   <target-repo>/scratch
-   cp    workflows/tiered-escalation-suite/Makefile  <target-repo>/Makefile
-   cp    workflows/tiered-escalation-suite/.gitignore <target-repo>/.gitignore
+   cp -R workflows/tiered-escalation-suite/.github       <target-repo>/.github
+   cp -R workflows/tiered-escalation-suite/.vscode        <target-repo>/.vscode
+   cp -R workflows/tiered-escalation-suite/.devcontainer  <target-repo>/.devcontainer
+   cp -R workflows/tiered-escalation-suite/scripts        <target-repo>/scripts
+   cp -R workflows/tiered-escalation-suite/scratch        <target-repo>/scratch
+   cp    workflows/tiered-escalation-suite/Makefile       <target-repo>/Makefile
+   cp    workflows/tiered-escalation-suite/.gitignore     <target-repo>/.gitignore
    ```
    Merge `Makefile` / `.gitignore` / `.vscode/settings.json` by hand instead of
-   overwriting if the target repo already has one.
+   overwriting if the target repo already has one. Skip `.devcontainer/` if you'd
+   rather install the toolchain on the host (step 2 below) than in a container.
 
-2. Install the toolchain the agents shell out to, then confirm readiness:
-   ```bash
-   bash scripts/install-prereqs.sh              # preview first with: --dry-run
-   bash scripts/install-prereqs.sh --java --web # if the target repo builds both stacks
-   bash scripts/preflight.sh                    # non-zero exit = not ready to encode
-   ```
+2. Get the toolchain the agents shell out to onto the machine that will run them —
+   either a devcontainer, or the bare host:
+   - **Devcontainer** (reproducible, no host installs): open the target repo in VS
+     Code and "Reopen in Container" — `.devcontainer/Dockerfile` builds the same
+     `scripts/install-prereqs.sh` toolchain into the image. If the target repo builds
+     a Java and/or Angular/Ionic stack, set `INSTALL_JAVA`/`INSTALL_WEB` to `"true"`
+     in `.devcontainer/devcontainer.json`'s `build.args` before building.
+   - **Host** (no container): run the installer directly, then confirm readiness:
+     ```bash
+     bash scripts/install-prereqs.sh              # preview first with: --dry-run
+     bash scripts/install-prereqs.sh --java --web # if the target repo builds both stacks
+     bash scripts/preflight.sh                    # non-zero exit = not ready to encode
+     ```
 
 3. Open the target repo in VS Code with Copilot **agent mode** (skills don't load in Ask
    mode), and enable the Preview flags for hooks + custom-agent-as-subagent per the

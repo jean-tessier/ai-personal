@@ -50,7 +50,9 @@ case "$mgr" in
   apt)
     run sudo apt-get update
     run sudo apt-get install -y ripgrep fd-find jq make build-essential
-    have fd || echo "note: Debian/Ubuntu ships fd as 'fdfind' — add: alias fd=fdfind"
+    # Debian/Ubuntu ship fd as 'fdfind' (a shell alias wouldn't help non-interactive
+    # callers like preflight.sh's `command -v fd`), so symlink the real binary.
+    if ! have fd && have fdfind; then run sudo ln -sf "$(command -v fdfind)" /usr/local/bin/fd; fi
     run npm install -g @ast-grep/cli
     if   have cargo; then run cargo install tokei
     elif have snap;  then run sudo snap install tokei
@@ -59,6 +61,7 @@ case "$mgr" in
       cv=1.8.1 ct="comby-${cv}-x86_64-linux.tar.gz"
       csum=ec0ca6477822154d71033e0b0a724c23a0608b99028ecab492bc9876ae8c458a
       echo "+ installing comby ${cv} (pinned, sha256-verified)"
+      run sudo apt-get install -y libev4  # comby's release binary links it dynamically
       if [ "$dry" -ne 1 ]; then
         t=$(mktemp -d)
         if curl -fsSL -o "$t/$ct" "https://github.com/comby-tools/comby/releases/download/${cv}/${ct}" \

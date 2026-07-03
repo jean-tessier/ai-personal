@@ -45,6 +45,7 @@ is the always-on routing contract every request pays for; the two dispatchable p
 | [scripts/preflight.sh](scripts/preflight.sh) / [scripts/install-prereqs.sh](scripts/install-prereqs.sh) | Toolchain doctor and installer for the binaries the agents shell out to (`rg`, `fd`, `ast-grep`, `jq`, `tokei`, `comby`) |
 | [Makefile](Makefile) | The single `make check` sensor — wired identically into `.vscode/tasks.json` and the `PostToolUse` hook |
 | [.vscode/settings.json](.vscode/settings.json), [.vscode/tasks.json](.vscode/tasks.json), [.vscode/mcp.json](.vscode/mcp.json) | Terminal auto-approve/deny lists, the `make check` task, and an empty MCP config reserved for a future Tier-3 Integrator peer |
+| [.devcontainer/Dockerfile](.devcontainer/Dockerfile), [.devcontainer/devcontainer.json](.devcontainer/devcontainer.json) | Optional: bakes `scripts/install-prereqs.sh`'s toolchain into a devcontainer image, so opening the target repo in a devcontainer skips the manual installer step |
 | [scratch/](scratch/.gitkeep) | Runtime-only working dir in the *target* repo (intermediates, `handoff/pending.diff`, `metrics.csv`) — gitignored there except its two `.gitkeep` placeholders |
 
 ## The one operational fact: hard vs. soft
@@ -106,10 +107,10 @@ merge/delete; subagent handoff overhead > naive read for a task class → stop d
 ## Conventions
 
 - This is a **drop-in payload**, not something read in place: `.github/`, `.vscode/`,
-  `Makefile`, `.gitignore`, and `scripts/` are copied verbatim to a target repo's root —
-  see [USAGE.md](USAGE.md). The nested `.github/...` paths are load-bearing; VS Code
-  Copilot only recognizes agents/skills/hooks at those exact locations, so nothing here
-  is flattened the way `hub-and-spoke-orchestration/agents/` is.
+  `.devcontainer/`, `Makefile`, `.gitignore`, and `scripts/` are copied verbatim to a
+  target repo's root — see [USAGE.md](USAGE.md). The nested `.github/...` paths are
+  load-bearing; VS Code Copilot only recognizes agents/skills/hooks at those exact
+  locations, so nothing here is flattened the way `hub-and-spoke-orchestration/agents/` is.
 - Two `scripts/` directories exist at different scopes — don't conflate them: the
   top-level [scripts/](scripts/) holds repo-wide gates (crosscheck, size-cap,
   validate-handoff, preflight, install-prereqs); `.github/skills/astgrep-rewrite/scripts/`
