@@ -11,10 +11,7 @@ secrets/
 
 # Editors
 .idea/
-.vscode/*
-!.vscode/tasks.json
-!.vscode/settings.json
-!.vscode/mcp.json
+.vscode/
 *.swp
 *.swo
 
