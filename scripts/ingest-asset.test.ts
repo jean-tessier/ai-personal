@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isKebabCase, nextRoleNumber, insertTableRow, extractFrontmatterField } from './ingest-asset.ts';
+import { isKebabCase, nextRoleNumber, insertTableRow, extractFrontmatterField, isMultiHarnessSuite } from './ingest-asset.ts';
 
 test('isKebabCase accepts valid names', () => {
   assert.equal(isKebabCase('atomic-commits'), true);
@@ -62,4 +62,14 @@ test('extractFrontmatterField reads a field from a frontmatter block', () => {
   assert.equal(extractFrontmatterField(content, 'name'), 'foo');
   assert.equal(extractFrontmatterField(content, 'description'), 'bar baz');
   assert.equal(extractFrontmatterField(content, 'missing'), '');
+});
+
+test('isMultiHarnessSuite is true when an entry matches a harness key', () => {
+  const entries = ['README.md', 'USAGE.md', 'claude-code', 'copilot'];
+  assert.equal(isMultiHarnessSuite(entries, ['claude-code', 'copilot']), true);
+});
+
+test('isMultiHarnessSuite is false for a flat suite with an agents/ dir', () => {
+  const entries = ['README.md', 'USAGE.md', 'agents'];
+  assert.equal(isMultiHarnessSuite(entries, ['claude-code', 'copilot']), false);
 });

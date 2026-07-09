@@ -28,6 +28,10 @@ export function extractFrontmatterField(content: string, field: string): string 
   return line ? line.slice(field.length + 1).trim() : '';
 }
 
+export function isMultiHarnessSuite(entries: string[], harnessKeys: string[]): boolean {
+  return entries.some((e) => harnessKeys.includes(e));
+}
+
 export function insertTableRow(markdown: string, headerLine: string, newRow: string): string {
   const lines = markdown.split('\n');
   const headerIdx = lines.findIndex((l) => l.trim() === headerLine.trim());
@@ -369,6 +373,16 @@ async function handleSuiteComponent(
   if (!isNew && !existsSync(suiteDir)) {
     console.error(`suites/${suite}/ does not exist but classification said "existing". Re-run with --suite <name> to fix.`);
     process.exit(1);
+  }
+
+  if (existsSync(suiteDir)) {
+    const harnessKeys = Object.keys(JSON.parse(readFileSync(path.join(REPO_ROOT, 'scripts/harnesses.json'), 'utf8')));
+    if (isMultiHarnessSuite(readdirSync(suiteDir), harnessKeys)) {
+      console.error(
+        `suites/${suite}/ is a multi-harness suite (ADR-0006) — ingest-asset does not support writing into it. Place the component manually in the correct variant subdirectory.`,
+      );
+      process.exit(1);
+    }
   }
 
   const roleName = classification.proposed_name;
