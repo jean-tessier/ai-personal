@@ -1,21 +1,17 @@
 # workflows/
 
 Grouped collections of inter-referential prompts and/or skills that only function
-together — as distinct from the single, independently-invocable assets in
-`prompts/agents/`, `prompts/tasks/`, and `skills/`.
+together — as distinct from the single, independently-invocable skills in `skills/`.
 
 ## When to use `workflows/`
 
 | Asset | Lives in | Invocable alone? |
 |---|---|---|
-| Agent prompt | `prompts/agents/{name}/` | Yes |
-| Task prompt | `prompts/tasks/{name}.md` | Yes |
 | Skill | `skills/{name}/` | Yes |
-| Skill pack | `packs/{pack-name}/skills/{name}/` | Yes, per skill — bundled for distribution as one plugin, not for coupling |
 | Orchestration system | `workflows/{name}/` | No — components reference each other and are deployed as a set |
 
 If moving, renaming, or deleting one file would break others in the set, the set
-belongs in `workflows/`, not scattered across `prompts/agents/` or `skills/`.
+belongs in `workflows/`, not scattered across `skills/`.
 
 ## Structure per workflow
 

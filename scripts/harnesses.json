@@ -7,7 +7,6 @@
     },
     "mapping": {
       "skills": "skills/{name}",
-      "tasks": "commands/{name}.md",
       "workflows": "workflows/{name}"
     }
   },

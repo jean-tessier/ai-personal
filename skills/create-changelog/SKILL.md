@@ -1,27 +1,27 @@
 ---
 name: create-changelog
-description: Create or append a dated entry to a skill's or agent prompt's CHANGELOG.md
+description: Create or append a dated entry to a skill's CHANGELOG.md
 ---
 
 # Create Changelog
 
 ## Purpose
 
-Create or update the `CHANGELOG.md` for a skill (`skills/{name}/`), a packed skill (`packs/{pack-name}/skills/{name}/`), or agent prompt (`prompts/agents/{name}/`), per the versioning convention in the repo root `README.md`: `YYYY-MM-DD · {model-version} · {what changed and why}`. This log tracks drift in an asset's behavior across model versions — it is separate from git history and should describe *what changed in the asset's behavior or instructions*, not implementation mechanics.
+Create or update the `CHANGELOG.md` for a skill (`skills/{name}/`), per the versioning convention in the repo root `README.md`: `YYYY-MM-DD · {model-version} · {what changed and why}`. This log tracks drift in a skill's behavior across model versions — it is separate from git history and should describe *what changed in the skill's behavior or instructions*, not implementation mechanics.
 
 ## When to invoke
 
-When the user has just edited a skill or agent prompt and wants the change logged. Triggers on `/create-changelog`, or phrases like "log this change to the changelog", "add a changelog entry for X", or "update the CHANGELOG for this skill".
+When the user has just edited a skill and wants the change logged. Triggers on `/create-changelog`, or phrases like "log this change to the changelog", "add a changelog entry for X", or "update the CHANGELOG for this skill".
 
 Usage:
 
 ```
-/create-changelog <asset-name-or-path> [what-changed-and-why] [model-version]
+/create-changelog <skill-name-or-path> [what-changed-and-why] [model-version]
 ```
 
 **Arguments:**
 
-- `<asset-name-or-path>` — A bare asset name (e.g. `atomic-commits`) or an explicit path (`skills/atomic-commits`, `packs/ponytail/skills/ponytail-review`, `prompts/agents/planner`).
+- `<skill-name-or-path>` — A bare skill name (e.g. `atomic-commits`) or an explicit path (`skills/atomic-commits`).
 - `[what-changed-and-why]` — Optional free-form description of the change and its motivation. If omitted, ask the user one focused question before drafting.
 - `[model-version]` — Optional. Defaults to the model powering the current session if not given.
 
@@ -29,14 +29,12 @@ Usage:
 
 ## Steps
 
-### 1. Resolve the target asset directory
+### 1. Resolve the target skill directory
 
 - If the argument contains a `/`, treat it as a path relative to the repo root and use it directly.
-- Otherwise, check for `skills/<name>/`, `packs/*/skills/<name>/` (any pack containing a skill with this name), and `prompts/agents/<name>/`, in that order.
-  - If it exists in exactly one location, use that.
-  - If it exists in more than one (including two different packs), list every match and ask the user which one they mean.
-  - If it exists in neither, tell the user and ask for the correct path.
-- Confirm `SKILL.md` (for skills, standalone or packed) or `system.md` (for agent prompts) exists in the resolved directory — this confirms it's a real asset directory, not an arbitrary folder.
+- Otherwise, check for `skills/<name>/`.
+  - If it doesn't exist, tell the user and ask for the correct path.
+- Confirm `SKILL.md` exists in the resolved directory — this confirms it's a real skill directory, not an arbitrary folder.
 
 ### 2. Check for sufficient context
 

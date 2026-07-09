@@ -2,14 +2,18 @@
 date: 2026-07-01
 decision_date: 2026-07-01
 description: A pack's skills install as plain skills (reusing the skills mapping); packs get no separate top-level mapping key
-status: accepted
+status: superseded
 ---
 
 # ADR-0005: Packs Flatten Into the `skills` Destination Category
 
 ## Status
 
-Accepted
+Superseded (2026-07-08) — `packs/` was deleted from the repo (it held only empty scaffolding, no
+real pack, despite this ADR already having decided how one would install) as part of curating the
+repo for public release. `packs` is no longer an asset category; `install.sh` no longer has any
+pack-flattening logic. This ADR is kept for historical context should a real distributable pack
+appear again.
 
 ## Context
 

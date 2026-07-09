@@ -43,55 +43,6 @@ while IFS= read -r -d '' dir; do
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $skill_count -eq 0 ]] && printf "  (no skills yet)\n"
 
-# ── Packs ─────────────────────────────────────────────────────────────────────
-_head "packs"
-pack_count=0
-while IFS= read -r -d '' dir; do
-  name="$(basename "$dir")"
-  [[ "$name" == _* ]] && continue
-  ((pack_count++)) || true
-
-  manifest="$dir/.claude-plugin/plugin.json"
-  if [[ -f "$manifest" ]]; then
-    if validate_json "$manifest"; then _ok "packs/$name/.claude-plugin/plugin.json"
-    else _fail "packs/$name/.claude-plugin/plugin.json — invalid JSON"; fi
-  else
-    _fail "packs/$name/.claude-plugin/plugin.json — required file missing"
-  fi
-
-  if [[ -f "$dir/README.md" ]]; then _ok "packs/$name/README.md"
-  else _fail "packs/$name/README.md — required file missing"; fi
-
-  pack_skill_count=0
-  while IFS= read -r -d '' sdir; do
-    sname="$(basename "$sdir")"
-    [[ "$sname" == _* ]] && continue
-    ((pack_skill_count++)) || true
-    if [[ -f "$sdir/SKILL.md" ]]; then _ok "packs/$name/skills/$sname/SKILL.md"
-    else _fail "packs/$name/skills/$sname/SKILL.md — required file missing"; fi
-
-    if [[ -f "$sdir/CHANGELOG.md" ]]; then _ok "packs/$name/skills/$sname/CHANGELOG.md"
-    else _warn "packs/$name/skills/$sname/CHANGELOG.md — no version log yet"; fi
-  done < <(find "$dir/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-  [[ $pack_skill_count -eq 0 ]] && _fail "packs/$name/skills/ — no skills found in pack"
-done < <(find "$REPO/packs" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-[[ $pack_count -eq 0 ]] && printf "  (no packs yet)\n"
-
-# ── Agents ────────────────────────────────────────────────────────────────────
-_head "prompts/agents"
-agent_count=0
-while IFS= read -r -d '' dir; do
-  name="$(basename "$dir")"
-  [[ "$name" == _* ]] && continue
-  ((agent_count++)) || true
-  if [[ -f "$dir/system.md" ]]; then _ok "prompts/agents/$name/system.md"
-  else _fail "prompts/agents/$name/system.md — required file missing"; fi
-
-  if [[ -f "$dir/CHANGELOG.md" ]]; then _ok "prompts/agents/$name/CHANGELOG.md"
-  else _warn "prompts/agents/$name/CHANGELOG.md — no version log yet"; fi
-done < <(find "$REPO/prompts/agents" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-[[ $agent_count -eq 0 ]] && printf "  (no agents yet)\n"
-
 # ── Workflows ─────────────────────────────────────────────────────────────────
 _head "workflows"
 workflow_count=0
@@ -109,32 +60,6 @@ while IFS= read -r -d '' dir; do
   else _fail "workflows/$name/ — no grouped prompt files found in a component subdirectory"; fi
 done < <(find "$REPO/workflows" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $workflow_count -eq 0 ]] && printf "  (no workflows yet)\n"
-
-# ── MCP manifests ─────────────────────────────────────────────────────────────
-_head "tools/mcp"
-mcp_count=0
-while IFS= read -r -d '' dir; do
-  name="$(basename "$dir")"
-  ((mcp_count++)) || true
-  if [[ -f "$dir/manifest.json" ]]; then
-    if validate_json "$dir/manifest.json"; then _ok "tools/mcp/$name/manifest.json"
-    else _fail "tools/mcp/$name/manifest.json — invalid JSON"; fi
-  else
-    _fail "tools/mcp/$name/manifest.json — required file missing"
-  fi
-done < <(find "$REPO/tools/mcp" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-[[ $mcp_count -eq 0 ]] && printf "  (no MCP servers yet)\n"
-
-# ── Function schemas ──────────────────────────────────────────────────────────
-_head "tools/functions"
-fn_count=0
-while IFS= read -r -d '' file; do
-  rel="${file#"$REPO"/}"
-  ((fn_count++)) || true
-  if validate_json "$file"; then _ok "$rel"
-  else _fail "$rel — invalid JSON"; fi
-done < <(find "$REPO/tools/functions" -name "*.json" -print0 2>/dev/null | sort -z)
-[[ $fn_count -eq 0 ]] && printf "  (no function schemas yet)\n"
 
 # ── Harnesses ─────────────────────────────────────────────────────────────────
 _head "harnesses"
@@ -180,24 +105,6 @@ else
   _fail "scripts/harnesses.json — required file missing"
 fi
 [[ $harnesses_count -eq 0 ]] && printf "  (no harnesses yet)\n"
-
-# ── Eval / prompt alignment ───────────────────────────────────────────────────
-_head "evals alignment"
-while IFS= read -r -d '' dir; do
-  name="$(basename "$dir")"
-  [[ "$name" == _* ]] && continue
-  eval_dir="$REPO/evals/agents/$name"
-  if [[ -d "$eval_dir" ]]; then _ok "evals/agents/$name/ exists"
-  else _warn "prompts/agents/$name has no eval suite at evals/agents/$name/"; fi
-done < <(find "$REPO/prompts/agents" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-
-while IFS= read -r -d '' dir; do
-  name="$(basename "$dir")"
-  [[ "$name" == _* ]] && continue
-  eval_dir="$REPO/evals/skills/$name"
-  if [[ -d "$eval_dir" ]]; then _ok "evals/skills/$name/ exists"
-  else _warn "skills/$name has no eval suite at evals/skills/$name/"; fi
-done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n"

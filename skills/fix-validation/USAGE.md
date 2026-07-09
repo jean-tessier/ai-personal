@@ -15,13 +15,12 @@ then reports two sections: what it fixed and what still needs a human.
 ```
 /fix-validation skills/my-new-skill
 
-Before: skills/my-new-skill/manifest.json has a trailing-comma syntax error;
+Before: skills/my-new-skill/ has a CHANGELOG.md with no header yet;
         no SKILL.md exists yet.
 
 Fixed:
-  - manifest.json syntax corrected: {"name": "my-new-skill", "tags": ["foo"]}
+  - skills/my-new-skill/CHANGELOG.md: added standard header
 
 Needs manual authorship:
   - write skills/my-new-skill/SKILL.md
-  - author eval cases in evals/skills/my-new-skill/
 ```

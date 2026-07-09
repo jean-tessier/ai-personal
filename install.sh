@@ -24,7 +24,7 @@ OWNER="jean-tessier"
 REPO_NAME="ai-personal"
 REF="main"
 
-ALL_CATEGORIES=(skills packs agents workflows tasks mcp)
+ALL_CATEGORIES=(skills workflows)
 
 RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'; BLD='\033[1m'; NC='\033[0m'
 _ok()   { printf "${GRN}    ok${NC}  %s\n" "$1"; }
@@ -104,9 +104,7 @@ elif mode == "mapping":
 elif mode == "categories":
     catalog = load(os.environ["CATALOG_JSON"])
     assets = catalog.get("assets", {})
-    cats = [c for c in ("skills", "packs", "agents", "workflows", "tasks") if assets.get(c)]
-    if assets.get("tools", {}).get("mcp"):
-        cats.append("mcp")
+    cats = [c for c in ("skills", "workflows") if assets.get(c)]
     print(" ".join(cats))
 
 elif mode == "items":
@@ -114,24 +112,8 @@ elif mode == "items":
     assets = catalog.get("assets", {})
     category = args[0]
     items = []
-    if category == "packs":
-        # ponytail: packs have no top-level destination category of their own —
-        # a pack's skills flatten into the same units as standalone skills.
-        for pack in assets.get("packs", []):
-            for sk in pack.get("skills", []):
-                items.append((sk["name"], f'{pack["path"]}/skills/{sk["name"]}'))
-    elif category == "mcp":
-        for it in assets.get("tools", {}).get("mcp", []):
-            items.append((it["name"], it["path"]))
-    elif category == "tasks":
-        for it in assets.get("tasks", []):
-            # catalog.sh names tasks by filename ("foo.md"); the destination
-            # template already appends ".md", so strip it here once.
-            name = it["name"][:-3] if it["name"].endswith(".md") else it["name"]
-            items.append((name, it["path"]))
-    else:
-        for it in assets.get(category, []):
-            items.append((it["name"], it["path"]))
+    for it in assets.get(category, []):
+        items.append((it["name"], it["path"]))
     for name, path in items:
         print(f"{name}\t{path}")
 
@@ -288,7 +270,6 @@ select_assets() {
 
   for category in "${CATEGORIES[@]}"; do
     map_key="$category"
-    [[ "$category" == "packs" ]] && map_key="skills"
 
     if ! template=$(_json mapping "$HARNESS" "$map_key"); then
       _warn "category '$category' has no mapping for harness '$HARNESS' — skipped"

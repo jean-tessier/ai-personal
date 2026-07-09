@@ -1,10 +1,9 @@
 # workflows/ — Usage Guide
 
 `workflows/` is one workspace of the `ai-personal` monorepo: a personal library of
-reusable Claude Code assets (prompts, skills, workflows, tools, evals). This workspace
-specifically holds **grouped, inter-referential** prompt/skill collections that only
-function together as a set — as opposed to the independently-invocable assets in
-`prompts/agents/`, `prompts/tasks/`, and `skills/`.
+reusable Claude Code assets (skills and workflows). This workspace specifically holds
+**grouped, inter-referential** prompt/skill collections that only function together as
+a set — as opposed to the independently-invocable skills in `skills/`.
 
 Consumers of this file are:
 - **You (a developer)**, deciding which workflow to invoke for a given situation.
@@ -22,9 +21,8 @@ stays at the workspace level; it doesn't duplicate what's one level down.
 
 ```
 ai-personal/
-├── prompts/, skills/         ← standalone assets, invocable alone
-├── tools/, evals/
-└── workflows/                ← THIS workspace: sets that only work together
+├── skills/                    ← standalone assets, invocable alone
+└── workflows/                 ← THIS workspace: sets that only work together
     ├── handoff-workflow/                 (skill-set: one dir per skill)
     ├── hub-and-spoke-orchestration/      (agent-set: numbered prompt files)
     └── tiered-escalation-suite/          (Copilot/VS Code drop-in: .github/, .vscode/, scripts/, Makefile)

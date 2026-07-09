@@ -7,7 +7,7 @@ description: Audit and refresh every README in the repo against a quality rubric
 
 ## Purpose
 
-Keep every README in the repo accurate, consistent, and free of stale references by reviewing them against a fixed quality rubric — one subagent per grouped-asset workspace (root, `evals/`, `prompts/`, `skills/`, `packs/`, `tools/`, `workflows/`, and any future workspace with a README). Each reviewer verifies every claim in its scope against the real file tree and applies surgical fixes directly, rather than just producing a critique nobody acts on.
+Keep every README in the repo accurate, consistent, and free of stale references by reviewing them against a fixed quality rubric — one subagent per grouped-asset workspace (root, `skills/`, `workflows/`, and any future workspace with a README). Each reviewer verifies every claim in its scope against the real file tree and applies surgical fixes directly, rather than just producing a critique nobody acts on.
 
 ## When to invoke
 
@@ -21,7 +21,7 @@ Usage:
 
 **Arguments:**
 
-- `[workspace-filter]` — Optional. Restrict the audit to one top-level workspace (e.g. `skills`, `evals`) instead of the whole repo.
+- `[workspace-filter]` — Optional. Restrict the audit to one top-level workspace (e.g. `skills`, `workflows`) instead of the whole repo.
 
 ---
 

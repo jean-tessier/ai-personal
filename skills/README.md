@@ -1,21 +1,10 @@
 # skills/
 
-Procedural instruction sets. A skill teaches an agent *how to perform a procedure*,
-as distinct from a prompt, which establishes *who the agent is*.
+Procedural instruction sets. A skill teaches an agent *how to perform a procedure*.
 
-A skill here is standalone and monorepo-internal. If a skill is meant to be installed
-elsewhere as part of a single Claude Code plugin, it belongs in
-[`packs/{pack-name}/skills/`](../packs/README.md) instead — same `SKILL.md` contract,
-different packaging.
-
-## Skills vs. prompts
-
-| Dimension | Skill | Agent prompt |
-|-----------|-------|--------------|
-| Nature | Procedural (steps, constraints, output spec) | Contextual (identity, tone, domain knowledge) |
-| Reuse | High — shared across many agents | Low — usually specific to one agent |
-| Change trigger | Procedure or tooling changes | Agent purpose or model behaviour changes |
-| Consumer | Agent invokes it for a specific task | Agent carries it as standing context |
+A skill here is standalone and monorepo-internal — one canonical copy, referenced by
+name from any `workflows/{name}/` that uses it, never forked into the workflow's own
+directory.
 
 ## Structure per skill
 
