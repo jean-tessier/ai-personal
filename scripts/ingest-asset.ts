@@ -99,8 +99,6 @@ function buildDigest(): string {
 
 // ---------- LLM calls ----------
 
-const SKILL_EXAMPLE = readFileSync(path.join(REPO_ROOT, 'skills/fix-validation/SKILL.md'), 'utf8');
-
 const ROLE_FRONTMATTER_EXAMPLES = `Example 1 (suites/hub-and-spoke-orchestration/agents/01-orchestrator.md):
 ---
 name: orchestrator
@@ -191,7 +189,7 @@ async function runQuery(systemPrompt: string, prompt: string, schema: Record<str
       model,
       outputFormat: { type: 'json_schema', schema },
       settingSources: [],
-      tools: ['Read', 'Glob', 'Grep'],
+      allowedTools: ['Read', 'Glob', 'Grep'],
       cwd: REPO_ROOT,
       maxTurns: 20,
     },
@@ -231,6 +229,7 @@ proposed_name must be kebab-case (lowercase letters, digits, single hyphens betw
 }
 
 async function generateSkill(sourceContent: string, name: string, model: string): Promise<any> {
+  const skillExample = readFileSync(path.join(REPO_ROOT, 'skills/fix-validation/SKILL.md'), 'utf8');
   const systemPrompt = `You are generating a new skill for the "ai-personal" Claude Code asset repo, to be written at skills/${name}/.
 
 Repo conventions (follow exactly):
@@ -243,7 +242,7 @@ Repo conventions (follow exactly):
 - Do not generate a CHANGELOG.md — the caller creates it with a header only, per convention (new skills start with an empty log, never a fabricated entry).
 
 Real example SKILL.md for reference (note its frontmatter is shown only so you match the body's tone/structure — do not repeat frontmatter lines in your own skill_md_body):
-${SKILL_EXAMPLE}`;
+${skillExample}`;
 
   const prompt = `Source content to turn into a skill named "${name}":\n---\n${sourceContent}\n---`;
   return runQuery(systemPrompt, prompt, SKILL_GEN_SCHEMA, model);
@@ -387,15 +386,16 @@ async function handleSuiteComponent(
 
   const roleName = classification.proposed_name;
   const existingFiles = existsSync(agentsDir) ? readdirSync(agentsDir).filter((f) => f.endsWith('.md')) : [];
-  const collides = existingFiles.some(
+  const collidingFile = existingFiles.find(
     (f) => extractFrontmatterField(readFileSync(path.join(agentsDir, f), 'utf8'), 'name') === roleName,
   );
-  if (collides && !force) {
+  if (collidingFile && !force) {
     console.error(`A role named "${roleName}" already exists in suites/${suite}/agents/. Re-run with --name to pick a different role name, or --force.`);
     process.exit(1);
   }
-  const num = nextRoleNumber(existingFiles);
-  const roleFile = path.join(agentsDir, `${num}-${roleName}.md`);
+  const roleFile = collidingFile
+    ? path.join(agentsDir, collidingFile)
+    : path.join(agentsDir, `${nextRoleNumber(existingFiles)}-${roleName}.md`);
 
   let existingRosterDigest = '';
   if (!isNew) {
@@ -498,12 +498,20 @@ function parseArgs(argv: string[]) {
   const opts = { name: undefined as string | undefined, suite: undefined as string | undefined, dryRun: false, force: false, model: 'sonnet' };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (a === '--name') opts.name = rest[++i];
-    else if (a === '--suite') opts.suite = rest[++i];
-    else if (a === '--dry-run') opts.dryRun = true;
-    else if (a === '--force') opts.force = true;
-    else if (a === '--model') opts.model = rest[++i];
-    else {
+    if (a === '--name') {
+      if (++i >= rest.length) printUsageAndExit();
+      opts.name = rest[i];
+    } else if (a === '--suite') {
+      if (++i >= rest.length) printUsageAndExit();
+      opts.suite = rest[i];
+    } else if (a === '--dry-run') {
+      opts.dryRun = true;
+    } else if (a === '--force') {
+      opts.force = true;
+    } else if (a === '--model') {
+      if (++i >= rest.length) printUsageAndExit();
+      opts.model = rest[i];
+    } else {
       console.error(`Unknown flag: ${a}`);
       printUsageAndExit();
     }
