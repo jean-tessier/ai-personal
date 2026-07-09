@@ -1,0 +1,18 @@
+{
+  "name": "ai-personal",
+  "private": true,
+  "type": "module",
+  "description": "Tooling for this repo's own asset ingestion",
+  "scripts": {
+    "ingest-asset": "node scripts/ingest-asset.ts",
+    "test": "node --test scripts/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.77"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}
