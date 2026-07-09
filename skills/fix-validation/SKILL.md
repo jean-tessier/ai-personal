@@ -48,8 +48,8 @@ Every `FAIL` or `warn` line falls into one of two buckets:
 **Needs manual authorship — report only, do not create placeholder content:**
 
 - `FAIL  .../SKILL.md — required file missing` — needs a real procedure written by the user (or via a dedicated skill-creation flow).
-- `FAIL  workflows/{name}/README.md — required file missing` — needs a real description of the orchestration.
-- `FAIL  workflows/{name}/ — no grouped prompt files found` — needs real component prompt files.
+- `FAIL  suites/{name}/README.md — required file missing` — needs a real description of the orchestration.
+- `FAIL  suites/{name}/ — no grouped prompt files found` — needs real component prompt files.
 
 ### 3. Apply the auto-fixable fixes
 

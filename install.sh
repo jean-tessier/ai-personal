@@ -24,7 +24,7 @@ OWNER="jean-tessier"
 REPO_NAME="ai-personal"
 REF="main"
 
-ALL_CATEGORIES=(skills workflows)
+ALL_CATEGORIES=(skills suites)
 
 RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'; BLD='\033[1m'; NC='\033[0m'
 _ok()   { printf "${GRN}    ok${NC}  %s\n" "$1"; }
@@ -104,7 +104,7 @@ elif mode == "mapping":
 elif mode == "categories":
     catalog = load(os.environ["CATALOG_JSON"])
     assets = catalog.get("assets", {})
-    cats = [c for c in ("skills", "workflows") if assets.get(c)]
+    cats = [c for c in ("skills", "suites") if assets.get(c)]
     print(" ".join(cats))
 
 elif mode == "items":
@@ -260,7 +260,7 @@ _read_loop_pick() {
 # path can be exercised from a script with no real TTY attached.
 select_assets() {
   : > "$SELECTION_FILE"
-  local category map_key template found name src_rel dest_rel items_file
+  local category template found name src_rel dest_rel items_file
   local interactive=0
   if [[ -z "$ASSETS_RAW" ]]; then
     if [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
@@ -269,9 +269,7 @@ select_assets() {
   fi
 
   for category in "${CATEGORIES[@]}"; do
-    map_key="$category"
-
-    if ! template=$(_json mapping "$HARNESS" "$map_key"); then
+    if ! template=$(_json mapping "$HARNESS" "$category"); then
       _warn "category '$category' has no mapping for harness '$HARNESS' — skipped"
       continue
     fi

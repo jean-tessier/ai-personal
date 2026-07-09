@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A personal monorepo of reusable Claude Code assets — skills and multi-component workflows — kept
+A personal monorepo of reusable Claude Code assets — skills and multi-component suites — kept
 in one place with consistent structure, documentation, and a vendor-agnostic installer. There is no
 application code, build step, or package manager; everything is Markdown/JSON plus a handful of
 Bash scripts that catalog and validate the tree.
@@ -46,23 +46,23 @@ This distinction is the single most load-bearing piece of architecture — `scri
 | Kind | Lives in | Invocable alone? | Distributable outside this repo? |
 |---|---|---|---|
 | Skill | `skills/{name}/` (`SKILL.md` + `CHANGELOG.md` + `examples/`) | Yes | No |
-| Orchestration workflow | `workflows/{name}/` — grouped, inter-referential components | No — the set moves/breaks together | No |
+| Orchestration suite | `suites/{name}/` — grouped, inter-referential components | No — the set moves/breaks together | No |
 
 This repo only ships categories that have real, finished content in them — no placeholder
 categories awaiting their first asset. If a new kind of asset (agent prompts, MCP manifests,
 distributable skill packs, eval cases, etc.) gets real content again, add it back to this table,
-`scripts/catalog.sh`, `scripts/validate.sh`, and `scripts/harnesses.json` together; don't let one
-drift ahead of the others.
+`scripts/catalog.sh`, `scripts/validate.sh`, `scripts/harnesses.json`, and `install.sh`'s
+`ALL_CATEGORIES` array and `categories` mode together; don't let one drift ahead of the others.
 
 **Naming rule that matters across the whole repo**: a directory's kebab-case name is its canonical
-identifier everywhere — in `README.md`, in any workflow that references it, and in its own
+identifier everywhere — in `README.md`, in any suite that references it, and in its own
 `CHANGELOG.md`.
 
-**Don't fork a skill into a workflow.** `workflows/{name}/` is for components that only make sense
-as part of that workflow. A skill that's also independently useful stays a single copy under
-`skills/{name}/`, referenced by relative link/name from any workflow that uses it — never
-duplicated into the workflow's own directory. Two copies of the same skill drift silently; one
-already did (see git history around the `workflows/handoff-workflow` cleanup).
+**Don't fork a skill into a suite.** `suites/{name}/` is for components that only make sense
+as part of that suite. A skill that's also independently useful stays a single copy under
+`skills/{name}/`, referenced by relative link/name from any suite that uses it — never
+duplicated into the suite's own directory. Two copies of the same skill drift silently; one
+already did (see git history around the `suites/handoff-workflow` cleanup).
 
 ### The vendor-agnostic installer (`install.sh` + `scripts/harnesses.json`)
 
@@ -77,7 +77,7 @@ harness's name — adding a harness is a JSON edit, not a code change (see
 **Compatibility is expressed by omission, not error**: a harness's `mapping` only lists categories
 that survive an unmodified copy. A missing key means "structurally incompatible for this harness" —
 `install.sh` skips it with a one-line notice, never a failure. `copilot`'s mapping, for example, has
-no `workflows` key — this repo's `workflows/{name}/` shape doesn't map cleanly onto Copilot's native
+no `suites` key — this repo's `suites/{name}/` shape doesn't map cleanly onto Copilot's native
 layout. Don't assume every harness gets every category.
 
 ### This repo's own dogfood skill install

@@ -43,23 +43,23 @@ while IFS= read -r -d '' dir; do
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $skill_count -eq 0 ]] && printf "  (no skills yet)\n"
 
-# ── Workflows ─────────────────────────────────────────────────────────────────
-_head "workflows"
-workflow_count=0
+# ── Suites ────────────────────────────────────────────────────────────────────
+_head "suites"
+suite_count=0
 while IFS= read -r -d '' dir; do
   name="$(basename "$dir")"
   [[ "$name" == _* ]] && continue
-  ((workflow_count++)) || true
-  if [[ -f "$dir/README.md" ]]; then _ok "workflows/$name/README.md"
-  else _fail "workflows/$name/README.md — required file missing"; fi
+  ((suite_count++)) || true
+  if [[ -f "$dir/README.md" ]]; then _ok "suites/$name/README.md"
+  else _fail "suites/$name/README.md — required file missing"; fi
 
   n=0
   while IFS= read -r -d '' f; do ((n++)) || true; done \
     < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null)
-  if [[ $n -gt 0 ]]; then _ok "workflows/$name/ ($n grouped prompt file(s))"
-  else _fail "workflows/$name/ — no grouped prompt files found in a component subdirectory"; fi
-done < <(find "$REPO/workflows" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
-[[ $workflow_count -eq 0 ]] && printf "  (no workflows yet)\n"
+  if [[ $n -gt 0 ]]; then _ok "suites/$name/ ($n grouped prompt file(s))"
+  else _fail "suites/$name/ — no grouped prompt files found in a component subdirectory"; fi
+done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+[[ $suite_count -eq 0 ]] && printf "  (no suites yet)\n"
 
 # ── Harnesses ─────────────────────────────────────────────────────────────────
 _head "harnesses"

@@ -1,6 +1,6 @@
 # ai-personal
 
-Personal monorepo of reusable Claude Code assets — skills and multi-component workflows — kept
+Personal monorepo of reusable Claude Code assets — skills and multi-component suites — kept
 in one place with consistent structure, documentation, and a vendor-agnostic installer so they can
 be dropped into any project, professional or otherwise.
 
@@ -9,7 +9,7 @@ be dropped into any project, professional or otherwise.
 | Path | Contents |
 |------|----------|
 | `skills/` | Procedural instruction sets injected into agent context. See [`skills/README.md`](skills/README.md) |
-| `workflows/` | Grouped, inter-referential skill/prompt collections that only make sense as a set. See [`workflows/README.md`](workflows/README.md) |
+| `suites/` | Grouped, inter-referential skill/prompt collections that only make sense as a set. See [`suites/README.md`](suites/README.md) |
 | `docs/` | ADRs, operational memory, and archived session handoffs — the "why" behind this repo's own shape |
 | `scripts/` | Catalog generation and structural validation |
 
@@ -24,13 +24,13 @@ be dropped into any project, professional or otherwise.
 | [readme-maintenance](skills/readme-maintenance/SKILL.md) | Audits and refreshes every README in a repo against a quality rubric | vendor-agnostic |
 | [yaml-frontmatter](skills/yaml-frontmatter/SKILL.md) | Validates, adds, or updates YAML frontmatter on documentation files | vendor-agnostic |
 
-## Workflows
+## Suites
 
-| Workflow | What it does | Harness |
+| Suite | What it does | Harness |
 |----------|---------------|---------|
-| [handoff-workflow](workflows/handoff-workflow/README.md) | Carries multi-session work forward via a `handoff.md` file, then retires it into `docs/adrs/`, `docs/memory/`, `docs/archive/handoffs/` once its goal is met | Claude Code |
-| [hub-and-spoke-orchestration](workflows/hub-and-spoke-orchestration/README.md) | A multi-agent software-engineering pipeline (orchestrator/planner/explorer/coder/reviewer/arbiter/scribe/executor) built around a strict hub-and-spoke protocol | Claude Code |
-| [tiered-escalation-suite](workflows/tiered-escalation-suite/README.md) | A capability-scoped GitHub Copilot/VS Code agent suite, packaged as a drop-in payload (`.github/`, `.vscode/`, `Makefile`, `scripts/`) for a *target* project | GitHub Copilot / VS Code |
+| [handoff-workflow](suites/handoff-workflow/README.md) | Carries multi-session work forward via a `handoff.md` file, then retires it into `docs/adrs/`, `docs/memory/`, `docs/archive/handoffs/` once its goal is met | Claude Code |
+| [hub-and-spoke-orchestration](suites/hub-and-spoke-orchestration/README.md) | A multi-agent software-engineering pipeline (orchestrator/planner/explorer/coder/reviewer/arbiter/scribe/executor) built around a strict hub-and-spoke protocol | Claude Code |
+| [tiered-escalation-suite](suites/tiered-escalation-suite/README.md) | A capability-scoped GitHub Copilot/VS Code agent suite, packaged as a drop-in payload (`.github/`, `.vscode/`, `Makefile`, `scripts/`) for a *target* project | GitHub Copilot / VS Code |
 
 ## Installing
 
@@ -58,10 +58,10 @@ Harness/scope keys come from `scripts/harnesses.json`:
 | `copilot` | `project` → `.github` (no `user` scope) |
 
 `copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`. `copilot`'s
-mapping also has no `workflows` key, since `workflows/{name}/` doesn't map onto Copilot's native
+mapping also has no `suites` key, since `suites/{name}/` doesn't map onto Copilot's native
 layout — `install.sh` skips that category for `copilot` with a one-line notice, not a failure.
-`workflows/tiered-escalation-suite/` is Copilot-targeted, but it's a drop-in payload you copy by
-hand (see its own [USAGE.md](workflows/tiered-escalation-suite/USAGE.md)), not something
+`suites/tiered-escalation-suite/` is Copilot-targeted, but it's a drop-in payload you copy by
+hand (see its own [USAGE.md](suites/tiered-escalation-suite/USAGE.md)), not something
 `install.sh` places for you.
 
 Omitting `--assets` in a real terminal launches a picker per category (fzf → gum → numbered
@@ -70,10 +70,10 @@ have no TTY on stdin, so they skip the picker and install every category.
 
 ## Key conventions
 
-- A skill that's also used inside a workflow is referenced from that workflow, never forked into
+- A skill that's also used inside a suite is referenced from that suite, never forked into
   it — one canonical copy under `skills/{name}/`.
 - Skills that only function as a group (e.g. a multi-agent orchestration system) live under
-  `workflows/{name}/`, not as separate flat assets.
+  `suites/{name}/`, not as separate flat assets.
 - Skills carry a `CHANGELOG.md` to track drift across model versions.
 - Run `bash scripts/catalog.sh > catalog.json` to regenerate the asset index.
 - Run `bash scripts/validate.sh` before committing.

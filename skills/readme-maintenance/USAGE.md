@@ -16,10 +16,10 @@ end to confirm no structural regression; nothing is auto-committed.
 ```
 /readme-maintenance
 
-(a new workflows/ directory was added but the root README's workspace table wasn't updated)
+(a new suites/ directory was added but the root README's workspace table wasn't updated)
 
-→ reviewer for the root README finds the gap, confirms `workflows/` exists via `git ls-tree`,
-  adds the missing table row, reports "Workspace table: added missing workflows/ entry."
+→ reviewer for the root README finds the gap, confirms `suites/` exists via `git ls-tree`,
+  adds the missing table row, reports "Workspace table: added missing suites/ entry."
 → other reviewers check their own workspace READMEs for stale paths/commands
 → final summary: one report per workspace + a separate list of out-of-scope issues found
 → changes sit in the working tree for you to `git diff` and commit yourself

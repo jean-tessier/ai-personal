@@ -10,7 +10,7 @@ tags: [copilot, vscode, agent-suite]
 **Superseded (2026-07-08)**: the top-level `.github/`, `.vscode/`, and root-level suite scripts
 this document describes were deleted from the repo as part of curating it for public release —
 see ADR-0001's superseded note. The design lives on solely as
-[`workflows/tiered-escalation-suite/`](../../workflows/tiered-escalation-suite/README.md), a more
+[`suites/tiered-escalation-suite/`](../../suites/tiered-escalation-suite/README.md), a more
 complete, generalized, distributable payload. Kept below for historical context.
 
 ## What it is

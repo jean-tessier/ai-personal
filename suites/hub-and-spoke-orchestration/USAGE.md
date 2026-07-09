@@ -1,6 +1,6 @@
 # hub-and-spoke-orchestration — usage guide
 
-See [`README.md`](README.md) for what this workflow does, its components, and
+See [`README.md`](README.md) for what this suite does, its components, and
 conventions. This file is about *how to actually dispatch it* for a given change.
 
 ## How to use it

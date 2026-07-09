@@ -11,9 +11,9 @@ status: superseded
 
 Superseded (2026-07-08) — the top-level `.github/`, `.vscode/`, and root-level suite scripts this
 ADR describes were deleted from the repo as part of curating it for public release. The design
-lives on solely as `workflows/tiered-escalation-suite/`, a more complete, generalized,
+lives on solely as `suites/tiered-escalation-suite/`, a more complete, generalized,
 distributable payload meant to be copied into a *target* project rather than dogfooded in place
-here — see that workflow's `README.md`. This ADR is kept for historical context on why the
+here — see that suite's `README.md`. This ADR is kept for historical context on why the
 now-removed top-level copy existed and why it was never exercised live.
 
 ## Context

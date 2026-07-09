@@ -7,7 +7,7 @@
     },
     "mapping": {
       "skills": "skills/{name}",
-      "workflows": "workflows/{name}"
+      "suites": "suites/{name}"
     }
   },
   "copilot": {

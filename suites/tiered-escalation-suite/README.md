@@ -1,7 +1,7 @@
 # tiered-escalation-suite
 
 A capability-scoped GitHub Copilot/VS Code agent suite, packaged as a **drop-in payload**
-for a *target* project — unlike this repo's other workflows, none of these files are read
+for a *target* project — unlike this repo's other suites, none of these files are read
 in place by Claude Code; `.github/`, `.vscode/`, `Makefile`, `.gitignore`, and `scripts/`
 are meant to be copied verbatim into a target repo's root (see [USAGE.md](USAGE.md)).
 
@@ -116,6 +116,6 @@ merge/delete; subagent handoff overhead > naive read for a task class → stop d
   holds a script bundled with that one skill.
 - This repo already dogfoods an earlier iteration of the same design at its own root
   (`.github/agents/`, `.github/skills/`, `.github/hooks/`, `.vscode/` — see
-  `docs/adrs/ADR-0001-target-copilot-vscode-for-agent-suite.md`). This workflow is a
+  `docs/adrs/ADR-0001-target-copilot-vscode-for-agent-suite.md`). This suite is a
   separate, later revision of that design packaged for distribution to *other* projects —
   not a replacement for that dogfood, and the two are not kept in sync.

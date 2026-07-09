@@ -38,8 +38,8 @@ while IFS= read -r -d '' dir; do
   skills_json="${skills_json:+$skills_json,}$entry"
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
-# ── Workflows ─────────────────────────────────────────────────────────────────
-workflows_json=""
+# ── Suites ────────────────────────────────────────────────────────────────────
+suites_json=""
 while IFS= read -r -d '' dir; do
   name="$(basename "$dir")"
   [[ "$name" == _* ]] && continue
@@ -48,10 +48,10 @@ while IFS= read -r -d '' dir; do
     rel="${f#"$dir"/}"
     files_json="${files_json:+$files_json,}\"$(quote "$rel")\""
   done < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null | sort -z)
-  entry="$(printf '{"name":"%s","path":"workflows/%s","hasReadme":%s,"files":[%s]}' \
+  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s]}' \
     "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json")"
-  workflows_json="${workflows_json:+$workflows_json,}$entry"
-done < <(find "$REPO/workflows" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+  suites_json="${suites_json:+$suites_json,}$entry"
+done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
 # ── Emit ──────────────────────────────────────────────────────────────────────
 cat <<JSON
@@ -59,7 +59,7 @@ cat <<JSON
   "generated": "$timestamp",
   "assets": {
     "skills": [$skills_json],
-    "workflows": [$workflows_json]
+    "suites": [$suites_json]
   }
 }
 JSON

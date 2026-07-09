@@ -3,7 +3,7 @@
 Procedural instruction sets. A skill teaches an agent *how to perform a procedure*.
 
 A skill here is standalone and monorepo-internal — one canonical copy, referenced by
-name from any `workflows/{name}/` that uses it, never forked into the workflow's own
+name from any `suites/{name}/` that uses it, never forked into the suite's own
 directory.
 
 ## Structure per skill
