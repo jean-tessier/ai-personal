@@ -1,0 +1,5 @@
+# scratch is runtime-only: intermediates, handoff artifacts, metrics
+scratch/*
+!scratch/.gitkeep
+!scratch/handoff/
+!scratch/handoff/.gitkeep

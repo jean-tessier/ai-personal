@@ -1,0 +1,6 @@
+{
+  "event": "PostToolUse",
+  "match": { "tool": "edit_file" },
+  "run": "make check",
+  "onNonZero": "surface"
+}

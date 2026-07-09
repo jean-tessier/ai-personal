@@ -25,6 +25,7 @@ ai-personal/
 └── suites/                    ← THIS workspace: sets that only work together
     ├── handoff-workflow/                 (skill-set: one dir per skill)
     ├── hub-and-spoke-orchestration/      (agent-set: numbered prompt files)
+    ├── tier-layered-teams/               (harness-variant: claude-code/ + copilot/ subdirs)
     ├── tiered-escalation-suite/          (Copilot/VS Code drop-in: .github/, .vscode/, scripts/, Makefile)
     └── tiered-team-orchestration/         (agent-set: tiered leads + workers, numbered prompt files)
 ```
@@ -33,7 +34,10 @@ All suites except `tiered-escalation-suite` in this workspace produce/consume fi
 (the repo you're actually working in), not inside `ai-personal` itself — `suites/`
 holds the reusable instructions, not the output artifacts. `tiered-escalation-suite` is
 different: its payload is *copied wholesale* into a target project's root and
-never read in place by Claude Code (it's Copilot/VS Code-native).
+never read in place by Claude Code (it's Copilot/VS Code-native). `tier-layered-teams` is both:
+its `claude-code/` variant is dispatched and produces/consumes files in a target project like the
+others, while its `copilot/` variant is a drop-in payload copied wholesale, same as
+`tiered-escalation-suite`.
 
 ## Asset index
 
@@ -41,7 +45,8 @@ never read in place by Claude Code (it's Copilot/VS Code-native).
 |---|---|---|
 | [handoff-workflow](handoff-workflow/README.md) | Skill-set that carries multi-session work forward via `handoff.md`, then retires completed work into ADRs, `docs/memory/`, and a dated archive. | [USAGE.md](handoff-workflow/USAGE.md) |
 | [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Agent-prompt set for an unattended multi-agent pipeline (Orchestrator hub + Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes + Scribe write-path) that plans, implements, reviews, and merges a change to trunk. | [USAGE.md](hub-and-spoke-orchestration/USAGE.md) |
+| [tier-layered-teams](tier-layered-teams/README.md) | A two-axis orchestration lattice crossing model-cost team tiers (Opus orchestrator, Sonnet leads, Haiku workers) with T0–T3 tool escalation, shipped as a `claude-code/` agent-set variant and a `copilot/` drop-in payload variant from one shared pattern. | [USAGE.md](tier-layered-teams/USAGE.md) |
 | [tiered-escalation-suite](tiered-escalation-suite/README.md) | Capability-scoped GitHub Copilot/VS Code agent suite — read-only Surveyor / diff-gated Transformer peers plus a Verifier gate, hard-enforced via hooks and scripts rather than prose. Deploy-and-open, not dispatch-a-prompt. | [USAGE.md](tiered-escalation-suite/USAGE.md) |
 | [tiered-team-orchestration](tiered-team-orchestration/README.md) | A three-tier model-cost hierarchy — an Opus-tier core orchestrator plans and routes, Sonnet-tier research/coding/review team leads decompose and synthesize, Haiku-tier workers execute narrow tasks. | [USAGE.md](tiered-team-orchestration/USAGE.md) |
 
-All four are populated (no empty/placeholder suites currently exist in this workspace).
+All five are populated (no empty/placeholder suites currently exist in this workspace).

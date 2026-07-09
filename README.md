@@ -30,6 +30,7 @@ be dropped into any project, professional or otherwise.
 |----------|---------------|---------|
 | [handoff-workflow](suites/handoff-workflow/README.md) | Carries multi-session work forward via a `handoff.md` file, then retires it into `docs/adrs/`, `docs/memory/`, `docs/archive/handoffs/` once its goal is met | Claude Code |
 | [hub-and-spoke-orchestration](suites/hub-and-spoke-orchestration/README.md) | A multi-agent software-engineering pipeline (orchestrator/planner/explorer/coder/reviewer/arbiter/scribe/executor) built around a strict hub-and-spoke protocol | Claude Code |
+| [tier-layered-teams](suites/tier-layered-teams/README.md) | A two-axis orchestration lattice that crosses model-cost team tiers (Opus-tier orchestrator, Sonnet-tier leads, Haiku-tier workers) with T0–T3 tool escalation, shipped as Claude Code- and Copilot-native variants | Claude Code + GitHub Copilot / VS Code |
 | [tiered-escalation-suite](suites/tiered-escalation-suite/README.md) | A capability-scoped GitHub Copilot/VS Code agent suite, packaged as a drop-in payload (`.github/`, `.vscode/`, `Makefile`, `scripts/`) for a *target* project | GitHub Copilot / VS Code |
 | [tiered-team-orchestration](suites/tiered-team-orchestration/README.md) | A three-tier model-cost hierarchy — an Opus-tier core orchestrator plans and routes, Sonnet-tier research/coding/review team leads decompose and synthesize, Haiku-tier workers execute narrow tasks | Claude Code |
 
