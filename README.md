@@ -1,19 +1,36 @@
 # ai-personal
 
-Personal monorepo of reusable Claude Code assets — prompts, skills, workflows, tools, and
-eval cases — kept in one place with consistent structure and conventions.
+Personal monorepo of reusable Claude Code assets — skills and multi-component workflows — kept
+in one place with consistent structure, documentation, and a vendor-agnostic installer so they can
+be dropped into any project, professional or otherwise.
 
 ## Directory map
 
 | Path | Contents |
 |------|----------|
-| `prompts/` | Agent system prompts, one-shot task prompts, reusable shared fragments |
-| `skills/` | Procedural instruction sets injected into agent context |
-| `workflows/` | Grouped, inter-referential prompt/skill collections — e.g. multi-agent orchestration systems. See [`workflows/README.md`](workflows/README.md) |
-| `packs/` | Distributable skill bundles packaged as installable Claude Code plugins. See [`packs/README.md`](packs/README.md) |
-| `tools/` | MCP server manifests and function/tool schemas |
-| `evals/` | Eval cases — mirrors the `prompts/` and `skills/` tree exactly |
+| `skills/` | Procedural instruction sets injected into agent context. See [`skills/README.md`](skills/README.md) |
+| `workflows/` | Grouped, inter-referential skill/prompt collections that only make sense as a set. See [`workflows/README.md`](workflows/README.md) |
+| `docs/` | ADRs, operational memory, and archived session handoffs — the "why" behind this repo's own shape |
 | `scripts/` | Catalog generation and structural validation |
+
+## Skills
+
+| Skill | What it does | Harness |
+|-------|---------------|---------|
+| [atomic-commits](skills/atomic-commits/SKILL.md) | Splits a working diff into clean, atomic commits with dialect-aware messages (Conventional Commits, Changesets, kernel-style, plain prose) | vendor-agnostic |
+| [create-adr](skills/create-adr/SKILL.md) | Writes a new Architecture Decision Record to `docs/adrs/`, keeping its index in sync | vendor-agnostic |
+| [create-changelog](skills/create-changelog/SKILL.md) | Creates or appends a dated `CHANGELOG.md` entry for a skill | vendor-agnostic |
+| [fix-validation](skills/fix-validation/SKILL.md) | Runs `scripts/validate.sh`, auto-fixes mechanical structural issues, reports what needs manual authorship | this repo |
+| [readme-maintenance](skills/readme-maintenance/SKILL.md) | Audits and refreshes every README in a repo against a quality rubric | vendor-agnostic |
+| [yaml-frontmatter](skills/yaml-frontmatter/SKILL.md) | Validates, adds, or updates YAML frontmatter on documentation files | vendor-agnostic |
+
+## Workflows
+
+| Workflow | What it does | Harness |
+|----------|---------------|---------|
+| [handoff-workflow](workflows/handoff-workflow/README.md) | Carries multi-session work forward via a `handoff.md` file, then retires it into `docs/adrs/`, `docs/memory/`, `docs/archive/handoffs/` once its goal is met | Claude Code |
+| [hub-and-spoke-orchestration](workflows/hub-and-spoke-orchestration/README.md) | A multi-agent software-engineering pipeline (orchestrator/planner/explorer/coder/reviewer/arbiter/scribe/executor) built around a strict hub-and-spoke protocol | Claude Code |
+| [tiered-escalation-suite](workflows/tiered-escalation-suite/README.md) | A capability-scoped GitHub Copilot/VS Code agent suite, packaged as a drop-in payload (`.github/`, `.vscode/`, `Makefile`, `scripts/`) for a *target* project | GitHub Copilot / VS Code |
 
 ## Installing
 
@@ -40,7 +57,12 @@ Harness/scope keys come from `scripts/harnesses.json`:
 | `claude-code` | `project` → `.claude`, `user` → `~/.claude` |
 | `copilot` | `project` → `.github` (no `user` scope) |
 
-`copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`.
+`copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`. `copilot`'s
+mapping also has no `workflows` key, since `workflows/{name}/` doesn't map onto Copilot's native
+layout — `install.sh` skips that category for `copilot` with a one-line notice, not a failure.
+`workflows/tiered-escalation-suite/` is Copilot-targeted, but it's a drop-in payload you copy by
+hand (see its own [USAGE.md](workflows/tiered-escalation-suite/USAGE.md)), not something
+`install.sh` places for you.
 
 Omitting `--assets` in a real terminal launches a picker per category (fzf → gum → numbered
 prompt, whichever is available) instead of installing everything. Piped runs (`curl | bash`)
@@ -48,28 +70,19 @@ have no TTY on stdin, so they skip the picker and install every category.
 
 ## Key conventions
 
-- Skills and agent prompts live in their own subdirectory; task prompts are flat files
-  under `prompts/tasks/`, promoted to a subdirectory only when they need `examples/`.
-- Skills and agent prompts carry a `CHANGELOG.md` to track drift across model versions.
-- `_shared/` directories hold composable fragments not directly invocable as standalone assets.
-- Prompts/skills that only function as a group (e.g. a multi-agent orchestration system) live under `workflows/{name}/`, not as separate flat assets.
-- Skills meant to be installed elsewhere as a single Claude Code plugin live under `packs/{pack-name}/skills/{name}/`, not `skills/{name}/` — a pack's skills are still independently invocable (unlike `workflows/`), they just ship bundled under one plugin manifest.
+- A skill that's also used inside a workflow is referenced from that workflow, never forked into
+  it — one canonical copy under `skills/{name}/`.
+- Skills that only function as a group (e.g. a multi-agent orchestration system) live under
+  `workflows/{name}/`, not as separate flat assets.
+- Skills carry a `CHANGELOG.md` to track drift across model versions.
 - Run `bash scripts/catalog.sh > catalog.json` to regenerate the asset index.
 - Run `bash scripts/validate.sh` before committing.
-
-## Skills vs. prompts
-
-| Type | Location | Purpose |
-|------|----------|---------|
-| Agent prompt | `prompts/agents/{name}/system.md` | Who the agent is; standing context, persona, constraints |
-| Task prompt | `prompts/tasks/{name}.md` | One-shot instructions for a specific task |
-| Shared fragment | `prompts/_shared/` | Composable blocks (persona, format, reasoning mode) |
-| Skill | `skills/{name}/SKILL.md` | Procedural how-to: teaches an agent a specific procedure |
-| Skill pack | `packs/{pack-name}/skills/{name}/SKILL.md` | Same as a skill, but bundled with others into one installable Claude Code plugin |
+- This repo only ships categories with real, finished content — no placeholder directories
+  waiting for a first asset.
 
 ## Versioning
 
-Prompt and skill changes are logged in each asset's `CHANGELOG.md`.
+Skill changes are logged in each skill's `CHANGELOG.md`.
 Format: `YYYY-MM-DD · {model-version} · {what changed and why}`
 
 ## Running scripts

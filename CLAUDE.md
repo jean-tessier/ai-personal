@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A personal monorepo of reusable Claude Code assets — prompts, skills, workflows, tools, and eval
-cases — kept in one place with consistent structure and conventions. There is no application code,
-build step, or package manager; everything is Markdown/JSON/YAML plus a handful of Bash scripts
-that catalog and validate the tree.
+A personal monorepo of reusable Claude Code assets — skills and multi-component workflows — kept
+in one place with consistent structure, documentation, and a vendor-agnostic installer. There is no
+application code, build step, or package manager; everything is Markdown/JSON plus a handful of
+Bash scripts that catalog and validate the tree.
 
 ## Commands
 
@@ -25,9 +25,7 @@ is a structural linter (required files present, JSON well-formed, naming convent
 a behavioral one. `scripts/test-install.sh` is the one behavioral exception: it runs `install.sh`
 end-to-end against throwaway `mktemp` sandboxes (isolated `$PWD`/`$HOME`, cleaned up via `trap` on
 exit) using `install.sh`'s own test seams (`--local`, `INSTALL_FORCE_INTERACTIVE`) — see
-`docs/memory/vendor-agnostic-installer.md`. Behavioral drift for a specific prompt/skill is covered
-by `evals/{agents,skills,tasks}/{name}/cases.yaml` (mirrors the `prompts/`/`skills/` tree exactly) —
-but no eval-runner script exists yet; `cases.yaml` is a data format only.
+`docs/memory/vendor-agnostic-installer.md`.
 
 Installer (see Architecture below):
 
@@ -41,28 +39,30 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 
 ### The core asset taxonomy — read this before adding anything
 
-Everything in this repo is one of five kinds of asset, and the kind determines where it lives.
+Everything in this repo is one of two kinds of asset, and the kind determines where it lives.
 This distinction is the single most load-bearing piece of architecture — `scripts/catalog.sh`,
 `scripts/validate.sh`, and `install.sh`/`scripts/harnesses.json` all branch on it:
 
 | Kind | Lives in | Invocable alone? | Distributable outside this repo? |
 |---|---|---|---|
-| Agent prompt | `prompts/agents/{name}/` (`system.md` + `CHANGELOG.md` + `examples/`) | Yes | No |
-| Task prompt | `prompts/tasks/{name}.md` | Yes | No |
 | Skill | `skills/{name}/` (`SKILL.md` + `CHANGELOG.md` + `examples/`) | Yes | No |
-| Skill pack | `packs/{pack-name}/skills/{name}/` — same shape as a skill | Yes, per skill | Yes — installable as a Claude Code plugin, namespaced `{pack}:{skill}` |
 | Orchestration workflow | `workflows/{name}/` — grouped, inter-referential components | No — the set moves/breaks together | No |
 
-`prompts/_shared/` holds composable fragments (personas, output-formats, reasoning-modes) that are
-included by reference, not standalone assets. `tools/mcp/` and `tools/functions/` hold MCP server
-manifests and provider-specific function-schema shims (`_common/` canonical definition, one thin
-binding shim per provider — never a duplicate definition per provider).
+This repo only ships categories that have real, finished content in them — no placeholder
+categories awaiting their first asset. If a new kind of asset (agent prompts, MCP manifests,
+distributable skill packs, eval cases, etc.) gets real content again, add it back to this table,
+`scripts/catalog.sh`, `scripts/validate.sh`, and `scripts/harnesses.json` together; don't let one
+drift ahead of the others.
 
-**Naming rule that matters across the whole repo**: a directory/file's kebab-case name is its
-canonical identifier everywhere. `skills/foo/` must have a matching `evals/skills/foo/`;
-`prompts/agents/bar/` must match `evals/agents/bar/`; same for `prompts/tasks/baz.md` ↔
-`evals/tasks/baz/`. `scripts/validate.sh`'s "evals alignment" section warns (not fails) when this
-drifts.
+**Naming rule that matters across the whole repo**: a directory's kebab-case name is its canonical
+identifier everywhere — in `README.md`, in any workflow that references it, and in its own
+`CHANGELOG.md`.
+
+**Don't fork a skill into a workflow.** `workflows/{name}/` is for components that only make sense
+as part of that workflow. A skill that's also independently useful stays a single copy under
+`skills/{name}/`, referenced by relative link/name from any workflow that uses it — never
+duplicated into the workflow's own directory. Two copies of the same skill drift silently; one
+already did (see git history around the `workflows/handoff-workflow` cleanup).
 
 ### The vendor-agnostic installer (`install.sh` + `scripts/harnesses.json`)
 
@@ -76,27 +76,20 @@ harness's name — adding a harness is a JSON edit, not a code change (see
 
 **Compatibility is expressed by omission, not error**: a harness's `mapping` only lists categories
 that survive an unmodified copy. A missing key means "structurally incompatible for this harness" —
-`install.sh` skips it with a one-line notice, never a failure. Notably, `claude-code`'s own mapping
-omits `agents` and `mcp` too, not just `copilot`'s — this repo's own asset shapes for those two
-categories don't match Claude Code's *native* subagent/MCP file formats either (see
-`docs/adrs/ADR-0004-claude-code-native-formats-incompatible.md`). Don't assume "it's the native
-harness" implies full category coverage.
+`install.sh` skips it with a one-line notice, never a failure. `copilot`'s mapping, for example, has
+no `workflows` key — this repo's `workflows/{name}/` shape doesn't map cleanly onto Copilot's native
+layout. Don't assume every harness gets every category.
 
-### Two parallel, non-synced harness targets: `.claude/` vs `.github/`
+### This repo's own dogfood skill install
 
-This repo's actual daily driver is Claude Code (`.claude/skills/`, `.claude/scheduled_tasks.lock`).
-It *also* maintains a fully separate, hand-authored GitHub Copilot/VS Code artifact set —
-`.github/agents/*.agent.md`, `.github/skills/*/SKILL.md`, `.github/hooks/*.json`, and
-`.vscode/{settings,tasks,mcp}.json` — built as a deliberate, complete dogfood of a
-"Capability-Scoped Agent Suite" design doc (`.tmp/capability-scoped-agent-suite.html`), documented in
-`docs/adrs/ADR-0001-target-copilot-vscode-for-agent-suite.md`. **These two trees are not kept in
-sync and do not read from each other.** A change to `skills/{name}/SKILL.md` does not propagate to
-`.github/skills/`; the Copilot suite's `surveyor`/`transformer`/`verifier` agents and its
-`scripts/{ab-report,cap-output,cross-check,validate-handoff,hook-block-apply-without-diff}.sh` hook
-scripts exist solely to enforce that design doc's invariants (dry-run-before-mutation, cross-checked
-counts, output-size caps, handoff-schema validation) inside a VS Code + Copilot Chat session — none
-of it has ever been exercised live (per the ADR). Don't assume editing one harness's artifacts
-updates the other.
+`.claude/skills/atomic-commits/` is a real installed copy of `skills/atomic-commits/` — kept so this
+repo can use its own `atomic-commits` skill on itself while working here. It's a copy, not a
+symlink, so it can drift from the canonical `skills/atomic-commits/`; refresh it (and pull in any
+other skill this repo wants to dogfood on itself) with:
+
+```bash
+bash install.sh --local . --harness claude-code --scope project --assets skills --force
+```
 
 ### Session continuity: the handoff loop
 
@@ -118,13 +111,14 @@ unrelated work.
 
 **Check [`docs/memory/INDEX.md`](docs/memory/INDEX.md) and [`docs/adrs/INDEX.md`](docs/adrs/INDEX.md)
 at the start of a session** — they index operational facts/deferred items and architectural
-decisions from prior sessions that may bear on the current task.
+decisions from prior sessions that may bear on the current task, including superseded ones (e.g.
+the retired GitHub Copilot/VS Code dogfood suite — see ADR-0001).
 
 ## Conventions
 
 - Commits follow Conventional Commits (`type: subject`, e.g. `feat:`, `docs:`, `fix:`, `test:`) —
   100% of recent history uses this prefix style.
-- Skill/agent-prompt changes are logged in that asset's own `CHANGELOG.md`:
+- Skill changes are logged in that skill's own `CHANGELOG.md`:
   `YYYY-MM-DD · {model-version} · {what changed and why}`.
 - Markdown docs (ADRs, memory docs, archived handoffs) carry YAML frontmatter with `date`,
   `description` (≤120 chars), and `status`.
