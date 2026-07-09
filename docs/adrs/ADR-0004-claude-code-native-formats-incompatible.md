@@ -2,14 +2,18 @@
 date: 2026-07-01
 decision_date: 2026-07-01
 description: claude-code's own mapping omits agents and tools/mcp too — this repo's asset shapes for those categories don't match Claude Code's native formats either, not just Copilot's
-status: accepted
+status: superseded
 ---
 
 # ADR-0004: `claude-code`'s Own Native Agent/MCP Formats Are Also Incompatible With This Repo's Shapes
 
 ## Status
 
-Accepted
+Superseded (2026-07-08) — `prompts/agents/` and `tools/mcp/` were deleted from the repo (they held
+only empty scaffolding, no real content) as part of curating it for public release. `agents` and
+`mcp` are no longer asset categories at all, so there's nothing left to omit from either harness's
+mapping. This ADR is kept for historical context on the shape-mismatch reasoning, should either
+category return with real content later.
 
 ## Context
 

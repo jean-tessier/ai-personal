@@ -172,10 +172,10 @@ test_category_without_mapping_skips() {
   _head "category with no mapping for harness warns, does not fail"
   local sb out code
   sb="$(new_sandbox)"
-  out="$(run_install "$sb" --harness claude-code --scope project --assets agents 2>&1)"; code=$?
+  out="$(run_install "$sb" --harness copilot --scope project --assets suites 2>&1)"; code=$?
   assert_exit "exits 0" 0 "$code"
   assert_contains "warns no mapping" "$out" "no mapping"
-  assert_missing "nothing installed" "$sb/cwd/.claude"
+  assert_missing "nothing installed" "$sb/cwd/.github"
 }
 
 test_missing_required_flags() {

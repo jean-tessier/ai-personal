@@ -15,12 +15,12 @@ Code — they're Copilot-native (`.agent.md`, `.github/skills/*/SKILL.md`,
 
 1. Copy the payload into the target repo's root:
    ```bash
-   cp -R workflows/tiered-escalation-suite/.github  <target-repo>/.github
-   cp -R workflows/tiered-escalation-suite/.vscode   <target-repo>/.vscode
-   cp -R workflows/tiered-escalation-suite/scripts   <target-repo>/scripts
-   cp -R workflows/tiered-escalation-suite/scratch   <target-repo>/scratch
-   cp    workflows/tiered-escalation-suite/Makefile  <target-repo>/Makefile
-   cp    workflows/tiered-escalation-suite/.gitignore <target-repo>/.gitignore
+   cp -R suites/tiered-escalation-suite/.github  <target-repo>/.github
+   cp -R suites/tiered-escalation-suite/.vscode   <target-repo>/.vscode
+   cp -R suites/tiered-escalation-suite/scripts   <target-repo>/scripts
+   cp -R suites/tiered-escalation-suite/scratch   <target-repo>/scratch
+   cp    suites/tiered-escalation-suite/Makefile  <target-repo>/Makefile
+   cp    suites/tiered-escalation-suite/.gitignore <target-repo>/.gitignore
    ```
    Merge `Makefile` / `.gitignore` / `.vscode/settings.json` by hand instead of
    overwriting if the target repo already has one.

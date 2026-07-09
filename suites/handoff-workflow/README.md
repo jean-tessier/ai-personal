@@ -38,10 +38,10 @@ resume/handoff pair in a subagent loop.
 | [resume-handoff](resume-handoff/SKILL.md) | Read side of the session loop — loads `handoff.md`, executes the Next task to its Definition of Done, then hands back to `handoff-document` |
 | [drive-to-completion](drive-to-completion/SKILL.md) | Orchestrates `resume-handoff` ↔ `handoff-document` across subagents autonomously until every locked task is done or a hard block surfaces |
 | [ingest-handoff](ingest-handoff/SKILL.md) | Invoked once a handoff's goal is met — classifies its content as decision, operational fact, or ephemeral, and dispatches the three skills below |
-| [create-adr](create-adr/SKILL.md) | Writes an Architecture Decision Record to `docs/adrs/`, updating `docs/adrs/INDEX.md` |
+| [create-adr](../../skills/create-adr/SKILL.md) | Writes an Architecture Decision Record to `docs/adrs/`, updating `docs/adrs/INDEX.md` — lives in `skills/`, shared rather than forked here |
 | [capture-deferred](capture-deferred/SKILL.md) | Appends unresolved open items and deferred work to `docs/memory/deferred-items.md` |
 | [archive-handoff](archive-handoff/SKILL.md) | Moves a fully-ingested `handoff.md` to `docs/archive/handoffs/` with frontmatter, and updates its index |
-| [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validates/adds/fixes YAML frontmatter on any `docs/` file against `docs/specs/yaml-frontmatter-spec.md` — the same spec the three skills above apply inline when they write frontmatter themselves |
+| [yaml-frontmatter](../../skills/yaml-frontmatter/SKILL.md) | Validates/adds/fixes YAML frontmatter on any `docs/` file against `docs/specs/yaml-frontmatter-spec.md` — the same spec the three skills above apply inline when they write frontmatter themselves; lives in `skills/`, shared rather than forked here |
 
 ## Conventions
 

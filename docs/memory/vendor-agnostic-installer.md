@@ -104,10 +104,19 @@ flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's dec
 
 ## Known, accepted gaps (not bugs)
 
-- `claude-code.mapping` and `copilot.mapping` both omit `agents` and `mcp` — this repo's
-  `prompts/agents/`/`tools/mcp/` storage shapes don't match either harness's native subagent/MCP
-  config format. See ADR-0004.
 - Piped `curl | bash` (no explicit `--assets`) has no TTY on stdin, so it always installs every
   category rather than launching the interactive picker — documented in `README.md`.
 - `copilot` has no `user` scope (`project` → `.github` only) — passing `--scope user --harness
   copilot` fails cleanly (`scope_root` lookup returns nothing → `_fail`), by design.
+- `copilot.mapping` omits `suites` — `suites/{name}/` doesn't map onto Copilot's native
+  layout for the two Claude Code-targeted suites; `tiered-escalation-suite` (Copilot-targeted)
+  is a hand-copied drop-in payload instead, not something `install.sh` places.
+
+**2026-07-08 update**: `agents`, `packs`, `tasks`, and `mcp` are no longer asset categories at
+all — `prompts/`, `packs/`, and `tools/` were pruned from the repo (they held only empty
+scaffolding, no real assets). `ALL_CATEGORIES` in `install.sh` is now `(skills suites)`. See
+ADR-0001's, ADR-0004's, and ADR-0005's superseded notes.
+
+**2026-07-08 update**: `workflows/` was renamed to `suites/` across the repo (directory,
+`scripts/harnesses.json`'s mapping key, `scripts/catalog.sh`/`scripts/validate.sh`'s category
+name, and `install.sh`'s `ALL_CATEGORIES`) to avoid implying a step-by-step workflow structure.

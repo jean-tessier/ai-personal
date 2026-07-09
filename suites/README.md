@@ -1,27 +1,23 @@
-# workflows/
+# suites/
 
 Grouped collections of inter-referential prompts and/or skills that only function
-together — as distinct from the single, independently-invocable assets in
-`prompts/agents/`, `prompts/tasks/`, and `skills/`.
+together — as distinct from the single, independently-invocable skills in `skills/`.
 
-## When to use `workflows/`
+## When to use `suites/`
 
 | Asset | Lives in | Invocable alone? |
 |---|---|---|
-| Agent prompt | `prompts/agents/{name}/` | Yes |
-| Task prompt | `prompts/tasks/{name}.md` | Yes |
 | Skill | `skills/{name}/` | Yes |
-| Skill pack | `packs/{pack-name}/skills/{name}/` | Yes, per skill — bundled for distribution as one plugin, not for coupling |
-| Orchestration system | `workflows/{name}/` | No — components reference each other and are deployed as a set |
+| Orchestration system | `suites/{name}/` | No — components reference each other and are deployed as a set |
 
 If moving, renaming, or deleting one file would break others in the set, the set
-belongs in `workflows/`, not scattered across `prompts/agents/` or `skills/`.
+belongs in `suites/`, not scattered across `skills/`.
 
-## Structure per workflow
+## Structure per suite
 
 ```
-{workflow-name}/
-├── README.md       # What the workflow does, the role of each component, the entry point
+{suite-name}/
+├── README.md       # What the suite does, the role of each component, the entry point
 ├── USAGE.md        # How to invoke it: step-by-step guidance and a worked example
 └── agents/         # Grouped prompt files, numbered in read/dispatch order
     ├── 00-....md
@@ -33,7 +29,7 @@ or, when the components are skills, one subdirectory per skill — same shape as
 `skills/{name}/`:
 
 ```
-{workflow-name}/
+{suite-name}/
 ├── README.md
 ├── USAGE.md
 ├── {skill-a}/
@@ -42,16 +38,16 @@ or, when the components are skills, one subdirectory per skill — same shape as
     └── SKILL.md
 ```
 
-Grouped files live inside a component subdirectory — never loose at the workflow's
+Grouped files live inside a component subdirectory — never loose at the suite's
 top level — so `scripts/validate.sh` can tell a real group from an empty placeholder.
 
 ## Naming
 
 Kebab-case, describing the orchestration pattern: `hub-and-spoke-orchestration`.
 
-## Available workflows
+## Available suites
 
-| Workflow | Description |
+| Suite | Description |
 |---|---|
 | [handoff-workflow](handoff-workflow/README.md) | Multi-session work loop: `handoff.md` carries state between sessions via `resume-handoff`/`handoff-document`, then `ingest-handoff` retires a completed handoff into ADRs, `docs/memory/`, and the handoff archive. |
 | [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol. |
