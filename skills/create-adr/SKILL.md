@@ -35,6 +35,11 @@ Read both specification files before doing anything else:
 - `docs/specs/adr-template-spec.md` — ADR body structure, naming convention, frontmatter rules, and required sections.
 - `docs/specs/yaml-frontmatter-spec.md` — Base frontmatter field definitions, types, and validation rules.
 
+These are the consuming project's own files, kept under its `docs/specs/` so each project can
+configure its own ADR rules. If either is missing, copy this skill's own bundled templates into
+`docs/specs/`: `references/adr-template-spec.md` → `docs/specs/adr-template-spec.md`, and
+`references/yaml-frontmatter-spec.md` → `docs/specs/yaml-frontmatter-spec.md`.
+
 ### 2. Determine the next ADR number
 
 - List all files in `docs/adrs/` matching the pattern `ADR-[0-9][0-9][0-9][0-9]-*.md`.
@@ -60,7 +65,7 @@ Wait for the answer. Do not ask multiple questions at once.
   - **Decision** — open with "We will …" in active voice; be specific.
   - **Consequences** — three sub-sections (Positive, Negative, Neutral); at least one bullet each.
   - **References** — include if relevant links or docs were mentioned; omit the section entirely if none.
-- Set frontmatter `status` to `proposed` and `decision_date` to today's date in `YYYY-MM-DD` format.
+- Set the frontmatter block: populate every base field the project's `docs/specs/yaml-frontmatter-spec.md` requires (read in step 1) — filling `description` from the ADR's summary as single-line plain text within the spec's length limit and any date field with today's date — plus the ADR-specific `decision_date` (today, `YYYY-MM-DD`) and `status: proposed`.
 - Do not leave placeholder text (`<!-- … -->` comments, `…` bullets, or `YYYY-MM-DD` literals) in the written file. Every section must contain real content derived from the input.
 
 ### 5. Update `docs/adrs/INDEX.md`

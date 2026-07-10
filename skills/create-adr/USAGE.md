@@ -16,9 +16,10 @@ sparse, then writes the ADR and updates `docs/adrs/INDEX.md`.
 
 → writes docs/adrs/ADR-0001-react-server-components.md
   ---
-  status: proposed
+  date: 2026-06-30
   decision_date: 2026-06-30
   description: Adopt React Server Components for server-side rendering and data fetching
+  status: proposed
   ---
   ## Context
   Building full-stack features; needed to reduce client-side JavaScript...
