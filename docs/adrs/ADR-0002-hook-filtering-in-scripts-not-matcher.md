@@ -2,14 +2,19 @@
 date: 2026-07-01
 decision_date: 2026-06-30
 description: Filter hook commands in the invoked script, since VS Code ignores the hook JSON matcher field
-status: accepted
+status: superseded
 ---
 
 # ADR-0002: Hook Enforcement Lives in Invoked Scripts, Not the JSON `matcher` Field
 
 ## Status
 
-Accepted
+Superseded (2026-07-08) — the top-level `.github/hooks/*.json` configs and `scripts/hook-*.sh`
+filter scripts this ADR describes were deleted when the repo was curated for public release (see
+ADR-0001). The surviving `suites/tiered-escalation-suite/` uses a different, self-contained hook
+format (flat `{event, match, run, onNonZero}` with inline matching and no companion filter script),
+so this decision was not carried forward. Kept for historical context on the now-removed top-level
+implementation.
 
 ## Context
 
