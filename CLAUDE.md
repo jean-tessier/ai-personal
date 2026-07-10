@@ -5,27 +5,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 A personal monorepo of reusable Claude Code assets — skills and multi-component suites — kept
-in one place with consistent structure, documentation, and a vendor-agnostic installer. There is no
-application code, build step, or package manager; everything is Markdown/JSON plus a handful of
-Bash scripts that catalog and validate the tree.
+in one place with consistent structure, documentation, and a vendor-agnostic installer. The assets
+themselves are Markdown/JSON with no build step; the one exception is dev-only Node tooling under
+`scripts/` (the `ingest-asset` CLI, with its own `package.json`, unit tests, and typecheck) plus a
+handful of Bash scripts that catalog and validate the tree.
 
 ## Commands
 
 ```bash
 bash scripts/validate.sh          # structural lint; exits 1 on failures. Run before committing.
-make check                        # same thing (Makefile wraps validate.sh — the single deterministic gate)
+make check                        # validate.sh + node tests + typecheck (Makefile wraps them — the single deterministic gate)
 bash scripts/catalog.sh           # emit a JSON index of every named asset to stdout
 bash scripts/catalog.sh > catalog.json
 bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed via mktemp (no disk clutter)
 bash scripts/test-install-docker.sh   # same tests, fully isolated in a container (needs Docker running)
+node --test scripts/*.test.ts     # unit tests for the dev-only Node tooling in scripts/
+npx tsc --noEmit                  # typecheck the Node tooling
+npm run ingest-asset -- <path-to-source-file> [--dry-run]   # classify + scaffold a new skill or suite component
 ```
 
-There is no general unit-test framework and no `npm test`/`pytest` equivalent. `scripts/validate.sh`
-is a structural linter (required files present, JSON well-formed, naming conventions followed), not
-a behavioral one. `scripts/test-install.sh` is the one behavioral exception: it runs `install.sh`
-end-to-end against throwaway `mktemp` sandboxes (isolated `$PWD`/`$HOME`, cleaned up via `trap` on
-exit) using `install.sh`'s own test seams (`--local`, `INSTALL_FORCE_INTERACTIVE`) — see
-`docs/memory/vendor-agnostic-installer.md`.
+There is no general unit-test framework or `npm test`/`pytest` equivalent for the assets themselves.
+`scripts/validate.sh` is a structural linter (required files present, JSON well-formed, naming
+conventions followed), not a behavioral one — `npm test`/`npx tsc --noEmit` cover only the dev-only
+Node tooling under `scripts/`. `scripts/test-install.sh` is the one behavioral exception for the
+installer: it runs `install.sh` end-to-end against throwaway `mktemp` sandboxes (isolated
+`$PWD`/`$HOME`, cleaned up via `trap` on exit) using `install.sh`'s own test seams (`--local`,
+`INSTALL_FORCE_INTERACTIVE`) — see `docs/memory/vendor-agnostic-installer.md`.
 
 Installer (see Architecture below):
 
