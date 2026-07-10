@@ -50,6 +50,9 @@ If `status` is `superseded`, `superseded_by` is required and must name the doc o
 replaced this one (e.g. a decision-record id like `ADR-0004`, or a file path). If `status` is
 anything else, `superseded_by` must not be present.
 
+Files in `docs/adrs/` are exempt: an ADR records supersession in its `## Status` body per
+`adr-template-spec.md` and does not carry `superseded_by`.
+
 A project that adopts this rule after already having files marked `status: superseded` may find
 older files that predate the rule and lack `superseded_by`. That's an existing gap for `check-all`
 to flag and for `add`/`update` to close, not a reason to drop the rule — see Validation rules below.

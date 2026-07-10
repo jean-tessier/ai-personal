@@ -35,6 +35,11 @@ ADR-specific field:
   `date`, which tracks when the file's frontmatter was last touched; the two commonly differ (e.g.
   a decision made on one date gets its file edited — renumbered, superseded — on a later date).
 
+ADRs do **not** carry the base spec's conditional `superseded_by` frontmatter field. An ADR records
+supersession in its `## Status` section instead — a parenthetical date and one-line reason (see
+Required body sections). This ADR-specific rule overrides the base spec's `superseded_by`
+requirement for files in `docs/adrs/`.
+
 `status` takes one of:
 
 - `proposed` — newly drafted, not yet ratified.
