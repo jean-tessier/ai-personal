@@ -109,7 +109,7 @@ flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's dec
 - `copilot` has no `user` scope (`project` → `.github` only) — passing `--scope user --harness
   copilot` fails cleanly (`scope_root` lookup returns nothing → `_fail`), by design.
 - `copilot.mapping` omits `suites` — `suites/{name}/` doesn't map onto Copilot's native
-  layout for the two Claude Code-targeted suites; `tiered-escalation-suite` (Copilot-targeted)
+  layout for this repo's Claude Code-targeted suites; `tiered-escalation-suite` (Copilot-targeted)
   is a hand-copied drop-in payload instead, not something `install.sh` places.
 
 **2026-07-08 update**: `agents`, `packs`, `tasks`, and `mcp` are no longer asset categories at

@@ -13,7 +13,7 @@ directory.
 ├── SKILL.md       # The skill: procedure, constraints, examples
 ├── USAGE.md       # How to invoke it: trigger phrases, one worked example
 ├── CHANGELOG.md   # Date · model-version · what changed and why
-└── examples/      # Invocation examples or input/output pairs
+└── references/    # (optional) supporting docs; some skills also add scripts/
 ```
 
 ## SKILL.md frontmatter
@@ -34,7 +34,7 @@ in the catalog. Keep it under 120 characters.
 |-------|-------------|
 | [atomic-commits](atomic-commits/SKILL.md) | Generate clean, atomic git commits from working changes with meaningful messages that explain *why*, not just *what*. |
 | [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
-| [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's or agent prompt's CHANGELOG.md |
+| [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's CHANGELOG.md |
 | [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter on documentation files |

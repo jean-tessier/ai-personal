@@ -3,6 +3,7 @@ date: 2026-07-01
 decision_date: 2026-06-30
 description: Build the Capability-Scoped Agent Suite for GitHub Copilot/VS Code, not Claude Code
 status: superseded
+superseded_by: b305d3d
 ---
 
 # ADR-0001: Target GitHub Copilot/VS Code for the Capability-Scoped Agent Suite

@@ -12,8 +12,7 @@ context from chat history. The skills operate on files in the **target project**
 you're working in — `handoff.md` at its root, plus `docs/adrs/`, `docs/memory/`, and
 `docs/archive/handoffs/` — not on `ai-personal` itself.
 
-- **New multi-session effort** → invoke `handoff-document` (or its counterpart
-  `kickoff-document` for the very first write) to author the initial `handoff.md`.
+- **New multi-session effort** → invoke `handoff-document` to author the initial `handoff.md`.
 - **Picking work back up** → invoke `resume-handoff` at the start of the session, or
   whenever a message references `@handoff.md`.
 - **Want it unattended** → invoke `drive-to-completion` to loop `resume-handoff` ↔

@@ -35,6 +35,14 @@ ADR-specific field:
   `date`, which tracks when the file's frontmatter was last touched; the two commonly differ (e.g.
   a decision made on one date gets its file edited — renumbered, superseded — on a later date).
 
+ADRs carry the base spec's conditional `superseded_by` field like any other doc under `docs/` (see
+`yaml-frontmatter-spec.md`). Most of this repo's superseded ADRs were abandoned when the
+implementation they described was deleted, not replaced by a newer ADR — for those, `superseded_by`
+names the short commit SHA that performed the removal (e.g. `superseded_by: b305d3d`) instead of a
+decision-record id. The `## Status` section still carries the human-readable reason (a parenthetical
+date and one-line explanation — see Required body sections); `superseded_by` is the machine-readable
+pointer to what to check to confirm it.
+
 `status` takes one of:
 
 - `proposed` — newly drafted, not yet ratified.
