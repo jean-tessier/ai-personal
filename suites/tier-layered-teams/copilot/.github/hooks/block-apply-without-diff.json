@@ -1,0 +1,6 @@
+{
+  "event": "PreToolUse",
+  "match": { "tool": "terminal", "command": "(--update-all|--apply|comby -i)" },
+  "run": "test -f ./scratch/handoff/pending.diff",
+  "onNonZero": "block"
+}
