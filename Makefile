@@ -3,6 +3,8 @@
 
 check:
 	bash scripts/validate.sh
+	node --test scripts/*.test.ts
+	npx tsc --noEmit
 
 test-install:
 	bash scripts/test-install.sh

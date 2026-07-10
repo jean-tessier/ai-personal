@@ -1,0 +1,19 @@
+{
+  "github.copilot.chat.tools.terminal.autoApprove": {
+    "^rg ": true,
+    "^fd ": true,
+    "^ast-grep .* --json": true,
+    "^jq ": true,
+    "^tokei": true,
+    "^git (status|diff|log)": true,
+    "^make check": true
+  },
+  "github.copilot.chat.tools.terminal.denyList": {
+    "rm ": true,
+    "sudo": true,
+    "curl": true,
+    "chmod": true
+  },
+  "github.copilot.chat.otel.enabled": true,
+  "github.copilot.chat.otel.exporter.otlp.endpoint": "http://localhost:4318"
+}

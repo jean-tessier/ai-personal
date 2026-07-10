@@ -6,7 +6,7 @@
 keys/
 secrets/
 
-# Dependencies
+# Node
 node_modules/
 
 # macOS
@@ -14,7 +14,7 @@ node_modules/
 
 # Editors
 .idea/
-.vscode/
+/.vscode/
 *.swp
 *.swo
 
