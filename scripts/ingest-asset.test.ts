@@ -57,6 +57,19 @@ test('insertTableRow throws on a missing header', () => {
   assert.throws(() => insertTableRow('no tables here', '| Skill | Description |', '| [x](x) | y |'));
 });
 
+test('insertTableRow replaces an existing row for the same name instead of duplicating it', () => {
+  const md = [
+    '| Skill | Description |',
+    '|-------|-------------|',
+    '| [atomic-commits](atomic-commits/SKILL.md) | a |',
+    '| [fix-validation](fix-validation/SKILL.md) | b |',
+  ].join('\n');
+  const updated = insertTableRow(md, '| Skill | Description |', '| [fix-validation](fix-validation/SKILL.md) | updated |');
+  const lines = updated.split('\n');
+  assert.equal(lines.length, 4);
+  assert.equal(lines[3], '| [fix-validation](fix-validation/SKILL.md) | updated |');
+});
+
 test('extractFrontmatterField reads a field from a frontmatter block', () => {
   const content = '---\nname: foo\ndescription: bar baz\n---\n\nBody';
   assert.equal(extractFrontmatterField(content, 'name'), 'foo');

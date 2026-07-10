@@ -46,15 +46,16 @@ export function insertTableRow(markdown: string, headerLine: string, newRow: str
     return m ? m[1] : row;
   };
   const newName = nameOf(newRow);
-  let insertAt = dataRows.length;
-  for (let i = 0; i < dataRows.length; i++) {
-    if (nameOf(dataRows[i]).localeCompare(newName) > 0) {
+  const dedupedRows = dataRows.filter((row) => nameOf(row) !== newName);
+  let insertAt = dedupedRows.length;
+  for (let i = 0; i < dedupedRows.length; i++) {
+    if (nameOf(dedupedRows[i]).localeCompare(newName) > 0) {
       insertAt = i;
       break;
     }
   }
-  dataRows.splice(insertAt, 0, newRow);
-  return [...lines.slice(0, sepIdx + 1), ...dataRows, ...lines.slice(end)].join('\n');
+  dedupedRows.splice(insertAt, 0, newRow);
+  return [...lines.slice(0, sepIdx + 1), ...dedupedRows, ...lines.slice(end)].join('\n');
 }
 
 // ---------- repo context digest (deterministic, no LLM) ----------
@@ -473,7 +474,7 @@ async function handleSuiteComponent(
   }
 
   console.log(
-    `\nWrote suites/${suite}/agents/${num}-${roleName}.md${isNew ? ' plus a new suite README.md/USAGE.md and 3 index table rows' : ''}.`,
+    `\nWrote suites/${suite}/agents/${path.basename(roleFile)}${isNew ? ' plus a new suite README.md/USAGE.md and 3 index table rows' : ''}.`,
   );
   if (!isNew) {
     console.log(
