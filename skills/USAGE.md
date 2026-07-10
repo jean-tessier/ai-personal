@@ -51,7 +51,7 @@ structure and docs honest.
 |-------|-------------|--------------|
 | [atomic-commits](atomic-commits/SKILL.md) | Split a dirty working tree into atomic commits and write messages in the repo's detected commit dialect. | [USAGE.md](atomic-commits/USAGE.md) |
 | [create-adr](create-adr/SKILL.md) | Generate a numbered Architecture Decision Record in `docs/adrs/` and update its index. | [USAGE.md](create-adr/USAGE.md) |
-| [create-changelog](create-changelog/SKILL.md) | Append a dated, model-versioned entry to a skill's or agent prompt's `CHANGELOG.md`. | [USAGE.md](create-changelog/USAGE.md) |
+| [create-changelog](create-changelog/SKILL.md) | Append a dated, model-versioned entry to a skill's `CHANGELOG.md`. | [USAGE.md](create-changelog/USAGE.md) |
 | [fix-validation](fix-validation/SKILL.md) | Run `scripts/validate.sh`, auto-fix mechanical issues, and report what still needs manual authorship. | [USAGE.md](fix-validation/USAGE.md) |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and fix every README in the repo against a shared quality rubric, one subagent per workspace. | [USAGE.md](readme-maintenance/USAGE.md) |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter blocks on `docs/` files against a spec. | [USAGE.md](yaml-frontmatter/USAGE.md) |
