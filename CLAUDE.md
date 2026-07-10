@@ -99,8 +99,8 @@ bash install.sh --local . --harness claude-code --scope project --assets skills 
 ### Session continuity: the handoff loop
 
 Multi-session efforts in *this repo itself* are tracked via a `handoff.md` at the project root,
-authored/consumed by a chain of skills: `kickoff-document` (start) → `resume-handoff` /
-`handoff-document` (each session's read/write pair) → `ingest-handoff` (promote durable content once
+authored/consumed by a chain of skills: `resume-handoff` / `handoff-document` (each session's
+read/write pair; `handoff-document` also authors the first `handoff.md`) → `ingest-handoff` (promote durable content once
 a goal is met) → `archive-handoff` (move the closed-out handoff into `docs/archive/handoffs/`).
 `drive-to-completion` automates the whole loop across subagents. Durable output lands in three
 indexed stores, each with its own `INDEX.md`:
