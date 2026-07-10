@@ -3,6 +3,7 @@ date: 2026-07-01
 decision_date: 2026-06-30
 description: Filter hook commands in the invoked script, since VS Code ignores the hook JSON matcher field
 status: superseded
+superseded_by: b305d3d
 ---
 
 # ADR-0002: Hook Enforcement Lives in Invoked Scripts, Not the JSON `matcher` Field

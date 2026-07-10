@@ -3,6 +3,7 @@ date: 2026-07-01
 decision_date: 2026-07-01
 description: claude-code's own mapping omits agents and tools/mcp too — this repo's asset shapes for those categories don't match Claude Code's native formats either, not just Copilot's
 status: superseded
+superseded_by: b305d3d
 ---
 
 # ADR-0004: `claude-code`'s Own Native Agent/MCP Formats Are Also Incompatible With This Repo's Shapes

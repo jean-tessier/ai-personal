@@ -46,12 +46,10 @@ This is a closed set — a `status` value outside this list is a validation fail
 
 ## Conditional field: `superseded_by`
 
-If `status` is `superseded`, `superseded_by` is required and must name the doc or decision that
-replaced this one (e.g. a decision-record id like `ADR-0004`, or a file path). If `status` is
-anything else, `superseded_by` must not be present.
-
-Files in `docs/adrs/` are exempt: an ADR records supersession in its `## Status` body per
-`adr-template-spec.md` and does not carry `superseded_by`.
+If `status` is `superseded`, `superseded_by` is required and must name the doc, decision, or commit
+that replaced this one (e.g. a decision-record id like `ADR-0004`, a file path, or a short commit
+SHA when the replacement was a removal rather than a new document — see `adr-template-spec.md`).
+If `status` is anything else, `superseded_by` must not be present.
 
 A project that adopts this rule after already having files marked `status: superseded` may find
 older files that predate the rule and lack `superseded_by`. That's an existing gap for `check-all`

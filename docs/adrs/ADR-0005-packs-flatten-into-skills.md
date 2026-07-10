@@ -3,6 +3,7 @@ date: 2026-07-01
 decision_date: 2026-07-01
 description: A pack's skills install as plain skills (reusing the skills mapping); packs get no separate top-level mapping key
 status: superseded
+superseded_by: b305d3d
 ---
 
 # ADR-0005: Packs Flatten Into the `skills` Destination Category
