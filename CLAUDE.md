@@ -50,7 +50,7 @@ This distinction is the single most load-bearing piece of architecture — `scri
 
 | Kind | Lives in | Invocable alone? | Distributable outside this repo? |
 |---|---|---|---|
-| Skill | `skills/{name}/` (`SKILL.md` + `CHANGELOG.md` + `examples/`) | Yes | No |
+| Skill | `skills/{name}/` (`SKILL.md` + `USAGE.md` + `CHANGELOG.md`) | Yes | No |
 | Orchestration suite | `suites/{name}/` — grouped, inter-referential components | No — the set moves/breaks together | No |
 
 This repo only ships categories that have real, finished content in them — no placeholder

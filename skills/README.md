@@ -13,7 +13,7 @@ directory.
 ├── SKILL.md       # The skill: procedure, constraints, examples
 ├── USAGE.md       # How to invoke it: trigger phrases, one worked example
 ├── CHANGELOG.md   # Date · model-version · what changed and why
-└── examples/      # Invocation examples or input/output pairs
+└── references/    # (optional) supporting docs; some skills also add scripts/
 ```
 
 ## SKILL.md frontmatter
