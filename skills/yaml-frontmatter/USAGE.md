@@ -5,7 +5,7 @@ about *how to actually invoke it* and what a run looks like.
 
 ## How to use it
 
-Four modes, all sourced from `docs/specs/yaml-frontmatter-spec.md` in the target project:
+Four modes, all sourced from `docs/specs/yaml-frontmatter-spec.md` in the target project; if that file doesn't exist yet, copy the bundled `references/yaml-frontmatter-spec.md` template into `docs/specs/` as a starting point and customize it.
 
 ```
 /yaml-frontmatter                       # validate the current file in conversation

@@ -7,7 +7,7 @@ description: Validate, add, or update YAML frontmatter on documentation files
 
 ## Purpose
 
-Manage YAML frontmatter on project documentation files. The authoritative field definitions, types, allowed values, and validation rules live in `docs/specs/yaml-frontmatter-spec.md`. Read that file before performing any validation or generation.
+Manage YAML frontmatter on project documentation files. The authoritative field definitions, types, allowed values, and validation rules live in `docs/specs/yaml-frontmatter-spec.md` — the consuming project's own file. If that file doesn't exist yet, copy this skill's bundled template at `references/yaml-frontmatter-spec.md` into `docs/specs/` and customize it. Read the spec file before performing any validation or generation.
 
 ## When to invoke
 
