@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prereq installer for the Capability-Scoped Agent Suite.
+# Prereq installer for the tier-layered-teams Copilot suite.
 # Installs the CORE toolchain (search/structural + gate utilities) the agents shell
 # out to, then runs the preflight doctor. Stack toolchains are opt-in: --java, --web.
 # Windows: run this under WSL (comby is Linux-only anyway).

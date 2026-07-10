@@ -15,7 +15,7 @@ fi
 command -v jq >/dev/null 2>&1 || { echo "validate-handoff: neither ajv nor jq present — gate cannot run." >&2; exit 2; }
 jq -e '
   (.task | type == "string" and (. | length > 0))
-  and (.tier | type == "number" and . >= 0 and . <= 3)
+  and (.tier | type == "number" and . == floor and . >= 0 and . <= 3)
   and (.inputs | type == "object")
   and (.outputs | type == "object")
 ' "$doc" >/dev/null \

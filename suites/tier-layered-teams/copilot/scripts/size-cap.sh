@@ -6,7 +6,11 @@
 set -uo pipefail
 max=${1:?max_lines required}; shift
 [ "${1:-}" = "--" ] && shift
-out=$("$@")
+out=$("$@"); rc=$?
+if [ "$rc" -ne 0 ]; then
+  printf '%s\n' "$out" >&2
+  exit "$rc"
+fi
 n=$(printf '%s\n' "$out" | wc -l)
 if [ "$n" -le "$max" ]; then
   printf '%s\n' "$out"
