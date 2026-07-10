@@ -5,7 +5,7 @@
 # Each test runs install.sh against a throwaway sandbox (isolated CWD + HOME)
 # built under mktemp -d, so nothing touches the real repo or the real home
 # directory — every sandbox is deleted on exit, pass or fail. Uses install.sh's
-# documented test seams (--local, INSTALL_FORCE_INTERACTIVE); see
+# undocumented test seams (--local, INSTALL_FORCE_INTERACTIVE); see
 # docs/memory/vendor-agnostic-installer.md. Does not exercise the real
 # curl/tar network fetch — see that doc for the manual recipe for that.
 #
