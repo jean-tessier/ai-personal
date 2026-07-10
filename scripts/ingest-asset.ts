@@ -273,7 +273,10 @@ ${
 }`;
 
   const prompt = `Source content to turn into a role definition named "${roleName}":\n---\n${sourceContent}\n---`;
-  return runQuery(systemPrompt, prompt, SUITE_COMPONENT_GEN_SCHEMA, model);
+  const schema = isNew
+    ? { ...SUITE_COMPONENT_GEN_SCHEMA, required: [...SUITE_COMPONENT_GEN_SCHEMA.required, 'suite_readme', 'suite_usage', 'suite_top_level_summary', 'suite_harness'] }
+    : SUITE_COMPONENT_GEN_SCHEMA;
+  return runQuery(systemPrompt, prompt, schema, model);
 }
 
 // ---------- deterministic write layer ----------
