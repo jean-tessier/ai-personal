@@ -17,11 +17,12 @@ no `model` field. On another harness, adapt the frontmatter to that harness's
 subagent/model-routing mechanism — the role structure and the escalation protocol
 underneath don't change.
 
-**Before dispatching**: workers self-escalate to the same external binaries the copilot
-variant's preflight doctor checks for (`rg`, `fd`, `ast-grep`, `jq`, `comby`, `make
-check` — see the tool-axis tables in [`PROTOCOL.md`](PROTOCOL.md)). Run
-[`copilot/scripts/preflight.sh`](copilot/scripts/preflight.sh) against the target repo
-first; a missing T1/T2 binary doesn't fail loudly, it silently no-ops.
+**Before dispatching**: workers self-escalate to the same external tools the copilot
+variant's preflight doctor checks for (`rg`, `fd`, `ast-grep`, `jq`, `tokei`, `comby`,
+`make`, `node`, `npm` — see the tool-axis tables in [`PROTOCOL.md`](PROTOCOL.md)). After
+deploying the payload (see Copilot variant below), run `scripts/preflight.sh` from the
+target repo's root so its stack checks read that repo's files, not this one's; a missing
+T1/T2 tool doesn't fail loudly, it silently no-ops.
 
 A run starts by dispatching
 [`claude-code/agents/01-core-orchestrator.md`](claude-code/agents/01-core-orchestrator.md)
