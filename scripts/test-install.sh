@@ -216,6 +216,52 @@ test_missing_harnesses_json() {
   assert_not_contains "no raw python traceback" "$out" "Traceback"
 }
 
+test_deps_auto_added_with_yes_deps() {
+  _head "--yes-deps auto-adds a suite's dependencies"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run --yes-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "dry-run lists skills/create-adr" "$out" "skills/create-adr"
+  assert_contains "dry-run lists skills/yaml-frontmatter" "$out" "skills/yaml-frontmatter"
+}
+
+test_deps_missing_noninteractive_fails() {
+  _head "missing deps, no flags, no TTY: fails and names the paths (same under --dry-run)"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "names skills/create-adr" "$out" "skills/create-adr"
+  assert_contains "names skills/yaml-frontmatter" "$out" "skills/yaml-frontmatter"
+
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run 2>&1)"; code=$?
+  assert_exit "exits 1 under --dry-run too" 1 "$code"
+  assert_contains "names skills/create-adr under --dry-run" "$out" "skills/create-adr"
+  assert_contains "names skills/yaml-frontmatter under --dry-run" "$out" "skills/yaml-frontmatter"
+}
+
+test_deps_no_deps_flag_skips() {
+  _head "--no-deps opts out, does not silently add the dependency"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run --no-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "warns it is skipping dependencies" "$out" "skipping dependencies"
+  assert_not_contains "does not add skills/create-adr as a dry-run entry" "$out" "skills/create-adr ->"
+}
+
+test_deps_already_selected_no_duplicate() {
+  _head "a dependency already selected directly is not duplicated"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets skills,suites --dry-run --yes-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  [[ "$(grep -c "skills/create-adr" <<< "$out")" == "1" ]] \
+    && _ok "skills/create-adr appears exactly once" \
+    || _fail "skills/create-adr appears exactly once (got $(grep -c "skills/create-adr" <<< "$out"))"
+}
+
 test_interactive_picker_fallback() {
   _head "interactive numbered picker (no fzf/gum on PATH)"
   if command -v fzf &>/dev/null || command -v gum &>/dev/null; then
@@ -245,6 +291,10 @@ test_category_without_mapping_skips
 test_missing_required_flags
 test_help_flag
 test_missing_harnesses_json
+test_deps_auto_added_with_yes_deps
+test_deps_missing_noninteractive_fails
+test_deps_no_deps_flag_skips
+test_deps_already_selected_no_duplicate
 test_interactive_picker_fallback
 
 printf "\n"
