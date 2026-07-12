@@ -23,6 +23,7 @@ its design.
 |---|---|
 | Installer entrypoint | `install.sh` (repo root, not `scripts/`) |
 | Harness manifest | `scripts/harnesses.json` — one entry per harness: `label`, `scopes` (scope key → root path), `mapping` (asset category → destination template) |
+| Dependency manifest | `{category}/{name}/dependencies.json` — colocated, one file per asset, optional; flat JSON array of repo-relative paths (e.g. `["skills/create-adr", "skills/yaml-frontmatter"]`); absent means no dependencies. See [ADR-0007](../adrs/ADR-0007-colocated-dependency-manifest.md). |
 | User docs | `README.md`'s `## Installing` section |
 | Structural lint | `scripts/validate.sh`'s `── harnesses ──` section |
 
@@ -35,8 +36,11 @@ its design.
 For that, `bash scripts/test-install.sh` runs `install.sh` behaviorally: dry-run/actual installs
 into both scopes, `--force` skip-vs-overwrite, unknown harness/scope/category, a harness/category
 pair with no mapping, missing required flags, `-h`, the numbered-picker fallback (via
-`INSTALL_FORCE_INTERACTIVE=1`), and a regression test for the missing-`harnesses.json`
-traceback bug described below. Every test runs against a throwaway `mktemp -d` sandbox with an
+`INSTALL_FORCE_INTERACTIVE=1`), a regression test for the missing-`harnesses.json`
+traceback bug described below, and dependency resolution (`test_deps_*`, 4 cases: auto-add under
+`--yes-deps`, fail-closed with no flag — including under `--dry-run`, `--no-deps` skips without
+queuing an install line, no duplicate when a dependency is already independently selected). Every
+test runs against a throwaway `mktemp -d` sandbox with an
 isolated `$PWD`/`$HOME`, removed via `trap ... EXIT` — nothing touches the real repo or the real
 home directory, pass or fail. `bash scripts/test-install-docker.sh` runs the same script inside a
 `--rm --network none` container for full isolation (needs Docker running).
@@ -101,6 +105,12 @@ flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's dec
   runs. `main()` now checks `[[ -f "$SRC/scripts/harnesses.json" ]]` immediately after
   `build_catalog()` and `_fail`s cleanly if it's missing — add the same kind of explicit existence
   check before any future `_json` call that might run against an untrusted/older fetched tree.
+- **`"${arr[@]}"` on an empty array throws "unbound variable" under `set -u` on bash 3.2** (macOS's
+  system `/bin/bash`), unlike bash 4.4+ where it silently expands to nothing. `resolve_dependencies()`
+  avoids bash arrays for its working state entirely, using `$WORK`-scoped temp files instead
+  (`dep_candidates.txt`, `dep_resolvable.tsv`) — the same file-based idiom `select_assets()` already
+  uses for `$SELECTION_FILE`. Default to temp files over arrays for any future stateful loop in this
+  script, since macOS ships bash 3.2 and this repo doesn't require a newer one on `PATH`.
 
 ## Known, accepted gaps (not bugs)
 
@@ -120,3 +130,11 @@ ADR-0001's, ADR-0004's, and ADR-0005's superseded notes.
 **2026-07-08 update**: `workflows/` was renamed to `suites/` across the repo (directory,
 `scripts/harnesses.json`'s mapping key, `scripts/catalog.sh`/`scripts/validate.sh`'s category
 name, and `install.sh`'s `ALL_CATEGORIES`) to avoid implying a step-by-step workflow structure.
+
+**2026-07-12 update**: Assets can now declare dependencies on other assets via a colocated
+`dependencies.json` (e.g. `suites/handoff-workflow` depends on `skills/create-adr` and
+`skills/yaml-frontmatter`). `scripts/catalog.sh` surfaces it as a `"dependencies"` field per item,
+`scripts/validate.sh` checks it's valid JSON/a flat array/every path resolves, and `install.sh`'s
+`resolve_dependencies()` walks selected items to a fixed point and adds/skips/prompts/fails per the
+`--yes-deps`/`--no-deps` flags described above. See
+[ADR-0007](../adrs/ADR-0007-colocated-dependency-manifest.md) for the full decision record.
