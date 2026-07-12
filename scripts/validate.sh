@@ -28,6 +28,52 @@ validate_json() {
   fi
 }
 
+# Check an item's optional dependencies.json: valid JSON, flat string array,
+# every path resolves to a real skill/suite. Absent file is not an error.
+check_dependencies_json() {
+  local label="$1" dir="$2"
+  local file="$dir/dependencies.json"
+  [[ -f "$file" ]] || return 0
+
+  if ! validate_json "$file"; then
+    _fail "$label/dependencies.json — invalid JSON"
+    return
+  fi
+
+  if ! command -v python3 &>/dev/null; then
+    _warn "python3 not found; skipping dependencies.json shape/path checks: $label"
+    return
+  fi
+
+  while IFS=$'\t' read -r shape_ok dep; do
+    if [[ "$shape_ok" != "1" ]]; then
+      _fail "$label/dependencies.json — must be a flat array of strings"
+      return
+    fi
+    if [[ "$dep" == skills/* ]]; then
+      if [[ -f "$REPO/$dep/SKILL.md" ]]; then _ok "$label/dependencies.json -> $dep"
+      else _fail "$label/dependencies.json -> $dep — path does not resolve (missing SKILL.md)"; fi
+    elif [[ "$dep" == suites/* ]]; then
+      if [[ -f "$REPO/$dep/README.md" ]]; then _ok "$label/dependencies.json -> $dep"
+      else _fail "$label/dependencies.json -> $dep — path does not resolve (missing README.md)"; fi
+    else
+      _fail "$label/dependencies.json -> $dep — unrecognized category (expected skills/ or suites/ prefix)"
+    fi
+  done < <(python3 - "$file" <<'PY'
+import json, sys
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+if isinstance(data, list) and all(isinstance(x, str) for x in data):
+    for dep in data:
+        print(f"1\t{dep}")
+else:
+    print("0\t")
+PY
+)
+}
+
 # ── Skills ────────────────────────────────────────────────────────────────────
 _head "skills"
 skill_count=0
@@ -40,6 +86,8 @@ while IFS= read -r -d '' dir; do
 
   if [[ -f "$dir/CHANGELOG.md" ]]; then _ok "skills/$name/CHANGELOG.md"
   else _warn "skills/$name/CHANGELOG.md — no version log yet"; fi
+
+  check_dependencies_json "skills/$name" "$dir"
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $skill_count -eq 0 ]] && printf "  (no skills yet)\n"
 
@@ -58,6 +106,8 @@ while IFS= read -r -d '' dir; do
     < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null)
   if [[ $n -gt 0 ]]; then _ok "suites/$name/ ($n grouped prompt file(s))"
   else _fail "suites/$name/ — no grouped prompt files found in a component subdirectory"; fi
+
+  check_dependencies_json "suites/$name" "$dir"
 done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 [[ $suite_count -eq 0 ]] && printf "  (no suites yet)\n"
 
