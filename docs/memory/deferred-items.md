@@ -1,5 +1,5 @@
 ---
-date: 2026-07-01
+date: 2026-07-12
 description: Known deferred items, open decisions, and future work to revisit in later sessions
 status: active
 tags: [backlog, deferred]
@@ -20,6 +20,8 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 6 | Installed-assets manifest for future uninstall/update support (`install.sh`) | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | |
 | 7 | ~~`tasks` category name carries a stray `.md` from `catalog.sh`'s file-basename vs. `harnesses.json`'s `{name}.md` template — defensively stripped in `install.sh`, untested against real data since `prompts/tasks/` is currently empty~~ | tech-debt | low | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | moot 2026-07-08 (`prompts/tasks/` and the `tasks` category removed entirely — see ADR-0001 superseded note) |
 | 8 | `feature/vendor-agnostic-installer` is committed locally (5 commits: harnesses.json, install.sh, README docs, validate.sh integration, ADR/memory ingestion) but not pushed; `origin/main` is still at `1763ef7`, predating this whole effort | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | partially resolved 2026-07-01 (committed; push still open) |
+| 9 | Add test_deps_unsupported_category_warns case to scripts/test-install.sh | tech-debt | low | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | |
+| 10 | Decide whether/when to merge feature/asset-dependency-manifest into main | open-decision | normal | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | |
 
 > Item 1: two corroborating VS Code-specific sources (product docs + the
 > `microsoft/vscode-copilot-chat` extension repo) show `hookSpecificOutput.permissionDecision`
