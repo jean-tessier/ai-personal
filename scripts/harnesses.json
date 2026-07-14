@@ -16,7 +16,8 @@
       "project": ".github"
     },
     "mapping": {
-      "skills": "skills/{name}"
+      "skills": "skills/{name}",
+      "suites": "suites/{name}"
     }
   }
 }

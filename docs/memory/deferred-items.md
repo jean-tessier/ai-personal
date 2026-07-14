@@ -20,6 +20,7 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 6 | Installed-assets manifest for future uninstall/update support (`install.sh`) | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | |
 | 7 | ~~`tasks` category name carries a stray `.md` from `catalog.sh`'s file-basename vs. `harnesses.json`'s `{name}.md` template — defensively stripped in `install.sh`, untested against real data since `prompts/tasks/` is currently empty~~ | tech-debt | low | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | moot 2026-07-08 (`prompts/tasks/` and the `tasks` category removed entirely — see ADR-0001 superseded note) |
 | 8 | `feature/vendor-agnostic-installer` is committed locally (5 commits: harnesses.json, install.sh, README docs, validate.sh integration, ADR/memory ingestion) but not pushed; `origin/main` is still at `1763ef7`, predating this whole effort | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | partially resolved 2026-07-01 (committed; push still open) |
+| 9 | `install.sh`'s Copilot-suite translation (ADR-0007) is gated by three `is_copilot_suite_category()` calls hardcoded in `install.sh`'s own control flow, not expressed as data in `scripts/harnesses.json` the way `mapping` is — a partial reintroduction of the harness-name branching ADR-0003 was written to eliminate | tech-debt | normal | code review, 2026-07-13 session | 2026-07-13 | |
 
 > Item 1: two corroborating VS Code-specific sources (product docs + the
 > `microsoft/vscode-copilot-chat` extension repo) show `hookSpecificOutput.permissionDecision`
@@ -34,3 +35,12 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 >
 > Item 8: whether/when to commit and push this branch is the user's call, not any task's to decide
 > unilaterally — carried forward unresolved from the installer effort's final handoff.
+>
+> Item 9: surfaced by an independent code-review pass (altitude angle) on ADR-0007's own diff. The
+> transform's *content* is narrow and ADR-0007 defends that scope explicitly, but the *decision to
+> invoke it* — `$HARNESS == "copilot" && $category == "suites"` — lives in `install.sh` code at
+> three call sites (now consolidated behind one `is_copilot_suite_category()` helper, so at least
+> they can't drift from each other) rather than in `harnesses.json` data. A deeper fix would give
+> `harnesses.json`'s `mapping` schema a way to name a transform/eligibility check per category, and
+> have `install.sh` dispatch on it generically — undone here since it's a schema change beyond a
+> post-review cleanup pass, not because the critique is wrong.

@@ -120,3 +120,34 @@ ADR-0001's, ADR-0004's, and ADR-0005's superseded notes.
 **2026-07-08 update**: `workflows/` was renamed to `suites/` across the repo (directory,
 `scripts/harnesses.json`'s mapping key, `scripts/catalog.sh`/`scripts/validate.sh`'s category
 name, and `install.sh`'s `ALL_CATEGORIES`) to avoid implying a step-by-step workflow structure.
+
+**2026-07-13 update**: suites and skills that fit Claude Code's/Copilot's native plugin
+shape now carry real `.claude-plugin/plugin.json` manifests, and the repo root has a
+`.claude-plugin/marketplace.json` listing them — see
+[ADR-0007](../adrs/ADR-0007-suites-as-native-plugins.md). Two `install.sh` behaviors
+followed from that:
+
+- **Dependency auto-include**: selecting a suite also selects the skills it declares in
+  its `dependencies` array (`catalog.sh` surfaces this per suite as `dependencies`,
+  parsed from that suite's `.claude-plugin/plugin.json`), deduped against anything
+  already selected, with a one-line notice. `--no-deps` opts out globally.
+- **Copilot translation**: `copilot`'s `harnesses.json` mapping now has a `suites` key,
+  but only suites `catalog.sh` marks `pluginShaped` (a root `.claude-plugin/plugin.json`)
+  are reachable through it — `select_assets()` filters the rest out per-item with a
+  one-line notice, same compatibility-by-omission spirit as ADR-0003 applied at item
+  instead of category granularity. Eligible suites get mechanically rewritten by
+  `translate_to_copilot()`: `agents/*.md` → `agents/*.agent.md`, and
+  `.claude-plugin/plugin.json` relocated to a root `plugin.json`. `tiered-escalation-suite`
+  and `tier-layered-teams/copilot/` are drop-in payloads, not plugin-shaped, and stay
+  permanently unreachable through this path — unchanged from before this decision.
+
+**Windows gotcha found while verifying this**: a native Windows `python3.exe` (as opposed
+to WSL or a Unix `python3`) writes `\r\n` to stdout even when piped, which corrupts every
+`_json()` caller that does `read -r ... < <(_json ...)` or `var=$(_json ...)` — the
+symptom is `cp: cannot stat '...suite'$'\r': No such file or directory` or a bash
+arithmetic/`[[` syntax error pointing at a value that looks right when printed.
+`install.sh`'s `_json()` and `validate.sh`'s equivalent python-heredoc call sites now
+pipe through `tr -d '\r'` to strip it; `set -o pipefail` (already part of both scripts'
+top-level `set -euo pipefail`) keeps the underlying python exit code flowing through that
+extra pipe stage. Any new python-heredoc call site added to either script needs the same
+`| tr -d '\r'`.
