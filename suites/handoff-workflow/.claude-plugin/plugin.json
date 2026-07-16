@@ -9,9 +9,5 @@
     "./ingest-handoff",
     "./capture-deferred",
     "./archive-handoff"
-  ],
-  "dependencies": [
-    "create-adr",
-    "yaml-frontmatter"
   ]
 }

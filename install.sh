@@ -14,7 +14,8 @@
 #                       is attached — via fzf, gum, or a numbered prompt)
 #   --dry-run           print planned copy operations; write nothing
 #   --force             overwrite existing destination files/dirs (default: skip)
-#   --no-deps           don't auto-include a selected suite's declared skill dependencies
+#   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
+#   --no-deps           skip dependencies instead of adding/prompting
 #   -h, --help          show usage
 #
 # Exit:   0 success · 1 bad input or fetch/copy failure
@@ -43,7 +44,7 @@ command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force] [--no-deps]
+Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force] [--yes-deps|--no-deps]
 
   --harness   harness key from scripts/harnesses.json (e.g. claude-code, copilot)
   --scope     scope key declared for that harness (e.g. project, user)
@@ -51,7 +52,8 @@ Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [-
               if omitted with a TTY attached, pick interactively via fzf/gum/prompt)
   --dry-run   print planned copy operations; write nothing
   --force     overwrite existing destination files/dirs (default: skip existing)
-  --no-deps   don't auto-include a selected suite's declared skill dependencies
+  --yes-deps  auto-add dependencies (from dependencies.json) with no prompt
+  --no-deps   skip dependencies instead of adding/prompting
   -h, --help  show this help
 USAGE
 }
@@ -61,6 +63,7 @@ HARNESS=""
 SCOPE=""
 DRY_RUN=0
 FORCE=0
+YES_DEPS=0
 NO_DEPS=0
 LOCAL_PATH=""   # test seam: skip network fetch, use a local checkout instead
 
@@ -137,17 +140,16 @@ elif mode == "items":
     for name, path in items:
         print(f"{name}\t{path}")
 
-elif mode == "item_path":
+elif mode == "deps":
     catalog = load(os.environ["CATALOG_JSON"])
-    it = find_item(catalog, args[0], args[1])
-    if it is None:
-        sys.exit(1)
-    print(it["path"])
-
-elif mode == "suite_deps":
-    catalog = load(os.environ["CATALOG_JSON"])
-    it = find_item(catalog, "suites", args[0])
-    print(" ".join(it.get("dependencies", [])) if it else "")
+    assets = catalog.get("assets", {})
+    target_path = args[0]
+    for cat in ("skills", "suites"):
+        for it in assets.get(cat, []):
+            if it["path"] == target_path:
+                for dep in it.get("dependencies", []):
+                    print(dep)
+                break
 
 elif mode == "suite_plugin_shaped":
     catalog = load(os.environ["CATALOG_JSON"])
@@ -168,7 +170,8 @@ parse_args() {
       --scope)   SCOPE="$2"; shift 2 ;;
       --dry-run) DRY_RUN=1; shift ;;
       --force)   FORCE=1; shift ;;
-      --no-deps) NO_DEPS=1; shift ;;
+      --yes-deps) YES_DEPS=1; shift ;;
+      --no-deps)  NO_DEPS=1; shift ;;
       --local)   LOCAL_PATH="$2"; shift 2 ;;  # undocumented test seam
       -h|--help) usage; exit 0 ;;
       *) _fail "unknown flag: $1"; usage; exit 1 ;;
@@ -181,6 +184,7 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
+  if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
 }
 
 # ── Fetch (no git — curl + tar only) ────────────────────────────────────────
@@ -349,57 +353,6 @@ select_assets() {
       _warn "category '$category' has no assets in the catalog — nothing to select"
     fi
   done
-
-  resolve_dependencies
-}
-
-# ── Dependency resolution ────────────────────────────────────────────────────
-# For every suite in $SELECTION_FILE, auto-include its declared skill
-# dependencies (suites/{name}/.claude-plugin/plugin.json's "dependencies" array,
-# surfaced by catalog.sh as pluginShaped/dependencies) — mirrors how Claude
-# Code's own plugin installer auto-resolves a plugin's `dependencies`. On by
-# default; --no-deps opts out globally rather than per-dependency (per-dep
-# opt-in/opt-out flags are the thing Homebrew tried and removed in 2.0 for being
-# combinatorially untestable — see docs/adrs/ADR-0007).
-resolve_dependencies() {
-  [[ $NO_DEPS -eq 1 ]] && return
-  [[ ! -s "$SELECTION_FILE" ]] && return
-  # ponytail: `return 0` explicitly — a bare `return` after `||` inherits
-  # grep's own *failing* exit status (no match = no suites selected, a normal
-  # outcome here, not an error), which would make this function itself return
-  # nonzero and abort the whole script under set -e with no error message.
-  grep -q $'^suites\t' "$SELECTION_FILE" || return 0
-
-  local suite_name deps dep skills_tmpl src_rel dest_rel already
-
-  # Resolved once, not per-dependency — this template is invariant across every
-  # suite/dependency in a single run, so one failed/missing lookup means no
-  # dependency can ever be auto-included for this harness; say so once instead
-  # of repeating the same warning per dependency.
-  if ! skills_tmpl=$(_json mapping "$HARNESS" "skills"); then
-    _warn "harness '$HARNESS' has no 'skills' mapping — suite dependencies can't be auto-included"
-    return
-  fi
-
-  while IFS= read -r suite_name; do
-    [[ -z "$suite_name" ]] && continue
-    deps="$(_json suite_deps "$suite_name")"
-    [[ -z "$deps" ]] && continue
-
-    for dep in $deps; do
-      already="$(awk -F'\t' -v n="$dep" '$1=="skills" && $2==n{print; exit}' "$SELECTION_FILE")"
-      [[ -n "$already" ]] && continue
-
-      if ! src_rel=$(_json item_path "skills" "$dep"); then
-        _warn "suite '$suite_name' depends on unknown skill '$dep' — skipped"
-        continue
-      fi
-
-      dest_rel="${skills_tmpl//"{name}"/$dep}"
-      printf 'skills\t%s\t%s\t%s\n' "$dep" "$src_rel" "$dest_rel" >> "$SELECTION_FILE"
-      _warn "including dependency skill '$dep' for suite '$suite_name'"
-    done
-  done < <(awk -F'\t' '$1=="suites"{print $2}' "$SELECTION_FILE")
 }
 
 # ── Copilot translation ──────────────────────────────────────────────────────
@@ -429,6 +382,89 @@ translate_to_copilot() {
       mv "$f" "${base}.agent.md"
     done < <(find "$dest/agents" -maxdepth 1 -name "*.md" -print0)
   fi
+}
+
+# ── Dependency resolution ────────────────────────────────────────────────────
+# Runs after select_assets(), before apply_selection(). Each selected item may
+# declare deps via dependencies.json (surfaced by catalog.sh as
+# "dependencies":[...] and read here via `_json deps <path>`). Walk to a fixed
+# point: any pass that finds not-yet-selected deps decides once (via
+# --yes-deps/--no-deps/prompt/fail) whether to add them, then re-scans
+# (including newly-added rows) so transitive deps are picked up too, until a
+# pass finds nothing new.
+resolve_dependencies() {
+  local changed=1 category name src_rel dest_rel dep dep_category dep_name template reply decision
+  local candidates_file="$WORK/dep_candidates.txt"
+  local resolvable_file="$WORK/dep_resolvable.tsv"
+
+  while [[ $changed -eq 1 ]]; do
+    changed=0
+
+    # Pass 1: every dep of every currently-selected row, minus ones already
+    # selected (matched on the src_rel/path column) and minus dupes within
+    # this pass.
+    : > "$candidates_file"
+    while IFS=$'\t' read -r category name src_rel dest_rel; do
+      while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        grep -qF $'\t'"$dep"$'\t' "$SELECTION_FILE" && continue
+        grep -qxF "$dep" "$candidates_file" && continue
+        printf '%s\n' "$dep" >> "$candidates_file"
+      done < <(_json deps "$src_rel")
+    done < "$SELECTION_FILE"
+    [[ -s "$candidates_file" ]] || break
+
+    # Pass 2: resolve each candidate's category + harness mapping. A category
+    # with no mapping for this harness is warn-and-skip, same as
+    # select_assets() does for a whole requested category — never a hard
+    # failure by itself.
+    : > "$resolvable_file"
+    while IFS= read -r dep; do
+      case "$dep" in
+        skills/*) dep_category=skills ;;
+        suites/*) dep_category=suites ;;
+        *) _warn "dependency '$dep' has an unrecognized category — skipped"; continue ;;
+      esac
+      if ! template=$(_json mapping "$HARNESS" "$dep_category"); then
+        _warn "dependency '$dep' has no mapping for harness '$HARNESS' — skipped"
+        continue
+      fi
+      dep_name="${dep##*/}"
+      dest_rel="${template//"{name}"/$dep_name}"
+      printf '%s\t%s\t%s\t%s\n' "$dep_category" "$dep_name" "$dep" "$dest_rel" >> "$resolvable_file"
+    done < "$candidates_file"
+    [[ -s "$resolvable_file" ]] || break
+
+    # Decide once per pass for the whole batch of resolvable candidates.
+    if [[ $NO_DEPS -eq 1 ]]; then
+      decision=skip
+    elif [[ $YES_DEPS -eq 1 ]]; then
+      decision=add
+    elif [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
+      _head "dependencies"
+      printf '  not yet selected:\n'
+      cut -f3 "$resolvable_file" | sed 's/^/    /'
+      printf 'Add them? [Y/n] '
+      read -r reply
+      case "$reply" in
+        ""|[Yy]*) decision=add ;;
+        *)        decision=skip ;;
+      esac
+    else
+      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      exit 1
+    fi
+
+    if [[ "$decision" == skip ]]; then
+      _warn "skipping dependencies (--no-deps): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      break
+    fi
+
+    while IFS=$'\t' read -r category name dep dest_rel; do
+      printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$dep" "$dest_rel" >> "$SELECTION_FILE"
+      changed=1
+    done < "$resolvable_file"
+  done
 }
 
 resolve_root() {
@@ -494,6 +530,7 @@ main() {
   validate_harness_and_scope
   resolve_categories
   select_assets
+  resolve_dependencies
   apply_selection
 }
 
