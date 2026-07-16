@@ -18,7 +18,7 @@ quote()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Splice an item's optional dependencies.json verbatim, else "[]".
 read_dependencies_json() {
   local dir="$1"
-  [[ -f "$dir/dependencies.json" ]] && cat "$dir/dependencies.json" || printf '[]'
+  [[ -s "$dir/dependencies.json" ]] && cat "$dir/dependencies.json" || printf '[]'
 }
 
 # Extract first non-empty value of a YAML frontmatter key
