@@ -184,6 +184,7 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
+  if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
 }
 
 # ── Fetch (no git — curl + tar only) ────────────────────────────────────────
