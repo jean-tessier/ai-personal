@@ -50,6 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
 | `--dry-run` | print planned copy operations; write nothing |
 | `--force` | overwrite existing destination files/dirs (default: skip existing) |
+| `--no-deps` | don't auto-include a selected suite's declared skill dependencies (see below) |
 | `-h`, `--help` | show usage |
 
 Harness/scope keys come from `scripts/harnesses.json`:
@@ -59,12 +60,29 @@ Harness/scope keys come from `scripts/harnesses.json`:
 | `claude-code` | `project` → `.claude`, `user` → `~/.claude` |
 | `copilot` | `project` → `.github` (no `user` scope) |
 
-`copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`. `copilot`'s
-mapping also has no `suites` key, since `suites/{name}/` doesn't map onto Copilot's native
-layout — `install.sh` skips that category for `copilot` with a one-line notice, not a failure.
-`suites/tiered-escalation-suite/` is Copilot-targeted, but it's a drop-in payload you copy by
-hand (see its own [USAGE.md](suites/tiered-escalation-suite/USAGE.md)), not something
-`install.sh` places for you.
+`copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`.
+
+Some suites (and every skill) carry a `.claude-plugin/plugin.json`, making them real
+Claude Code/Copilot plugins — see
+[ADR-0007](docs/adrs/ADR-0007-suites-as-native-plugins.md). For those, `install.sh`:
+
+- **Auto-includes declared dependencies.** A suite that names shared skills in its
+  `plugin.json`'s `dependencies` (e.g. `handoff-workflow` needs `create-adr` and
+  `yaml-frontmatter`) gets those skills installed alongside it, deduped against
+  anything already selected. Pass `--no-deps` to skip this.
+- **Translates plugin-shaped suites for `--harness copilot`**: `agents/*.md` →
+  `agents/*.agent.md`, and `.claude-plugin/plugin.json` moves to a root `plugin.json` —
+  Copilot's own manifest location, per GitHub's docs. A suite without a
+  `.claude-plugin/plugin.json` at its root — a drop-in Copilot payload like
+  `suites/tiered-escalation-suite/`, or `suites/tier-layered-teams/copilot/` (which
+  already ships its own hand-authored Copilot form) — has no translated form and is
+  skipped for `copilot` with a one-line notice. `suites/tiered-escalation-suite/` is a
+  drop-in payload you copy by hand instead (see its own
+  [USAGE.md](suites/tiered-escalation-suite/USAGE.md)).
+
+This repo's root `.claude-plugin/marketplace.json` also makes it directly installable
+via `/plugin marketplace add jean-tessier/ai-personal` in Claude Code, alongside (not
+instead of) `install.sh`.
 
 Omitting `--assets` in a real terminal launches a picker per category (fzf → gum → numbered
 prompt, whichever is available) instead of installing everything. Piped runs (`curl | bash`)

@@ -1,15 +1,16 @@
 ---
-date: 2026-07-12
+date: 2026-07-16
 decision_date: 2026-07-12
 description: Declare asset deps as a colocated dependencies.json array, not a central manifest; install.sh resolves to a fixed point
 status: accepted
 ---
 
-# ADR-0007: Colocated Dependency Manifest, Resolved to a Fixed Point
+# ADR-0009: Colocated Dependency Manifest, Resolved to a Fixed Point
 
 ## Status
 
-Accepted
+Accepted — supersedes the dependency-resolution half of
+[ADR-0007](ADR-0007-suites-as-native-plugins.md).
 
 ## Context
 
@@ -24,6 +25,24 @@ This decision was made on `feature/asset-dependency-manifest`, after Task 5's co
 (`e05db75 test: cover dependency resolution in test-install.sh`); `install.sh`,
 `scripts/catalog.sh`, `scripts/validate.sh`, and `scripts/test-install.sh` already implement
 everything described below.
+
+**Reconciled with a competing mechanism on merge (2026-07-16).** While this branch was in flight,
+`main` independently grew its own suite-dependency auto-include feature as part of
+[ADR-0007](ADR-0007-suites-as-native-plugins.md): dependencies were declared as an array of bare
+skill names inside a suite's `.claude-plugin/plugin.json`, resolved single-pass (suite→skill only),
+always-on unless `--no-deps`, and structurally unvalidated. Both efforts implemented a bash
+function with the same name (`resolve_dependencies()`) and used the same real fixture
+(`suites/handoff-workflow` → `create-adr`, `yaml-frontmatter`), each declared in its own file.
+
+The merge kept **one** engine — this ADR's — because it strictly dominates the other: transitive
+rather than single-pass, structurally validated rather than unchecked, generic across categories
+rather than suite→skill only, and fail-closed rather than silently-partial for scripted runs. The
+plugin-manifest mechanism's dependency half was removed accordingly (`plugin_deps_json()` in
+`scripts/catalog.sh`, the `suite_deps`/`item_path` `_json` modes and second `resolve_dependencies()`
+in `install.sh`), and `handoff-workflow`'s `plugin.json` lost its now-redundant `dependencies` key
+so the colocated `dependencies.json` is the single source of truth. Everything else ADR-0007
+decided — `.claude-plugin/plugin.json` manifests, `pluginShaped`, Copilot translation — stands
+unchanged, and `pluginShaped` remains the gate for that translation.
 
 ## Decision
 
@@ -107,7 +126,10 @@ category of the item that declared it.
 - `install.sh`'s `resolve_dependencies()` (with its own header comment) and the `--yes-deps`/
   `--no-deps` flags in `parse_args()`/`usage()`.
 - `scripts/test-install.sh`'s `test_deps_*` functions — behavioral coverage for auto-add,
-  fail-closed, `--no-deps`, and no-duplicate-on-already-selected.
+  fail-closed, `--no-deps`, and no-duplicate-on-already-selected — plus
+  `test_no_deps_flag_skips_dependencies`, kept from ADR-0007's own test set on merge because it
+  asserts `--no-deps`'s resulting on-disk tree after a *real* install, which the dry-run-based
+  `test_deps_no_deps_flag_skips` doesn't cover.
 - `suites/handoff-workflow/dependencies.json` — the real fixture this mechanism was built for.
 - `docs/memory/vendor-agnostic-installer.md` — operating notes, extended for this feature.
 - `handoff.md` (this branch's session record) — Tasks 1 through 6.

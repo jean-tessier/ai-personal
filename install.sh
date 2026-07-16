@@ -34,6 +34,12 @@ _fail() { printf "${RED}  FAIL${NC}  %s\n" "$1" >&2; }
 _warn() { printf "${YLW}  note${NC}  %s\n" "$1"; }
 _head() { printf "\n${BLD}── %s ──${NC}\n" "$1"; }
 
+# True for the one (harness, category) pair install.sh currently knows how to
+# translate a plugin-shaped item for post-copy (see translate_to_copilot()).
+# Centralized so select_assets()'s eligibility filter and apply_selection()'s
+# dry-run note / real translate-call can't drift out of sync with each other.
+is_copilot_suite_category() { [[ "$HARNESS" == "copilot" && "$1" == "suites" ]]; }
+
 command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/harness JSON"; exit 1; }
 
 usage() {
@@ -70,13 +76,24 @@ HARNESSES_JSON=""
 CATEGORIES=()
 
 # ── JSON access (single dispatcher; python3 is the only non-stdlib dependency) ─
+# ponytail: piped through `tr -d '\r'` — a native Windows python3 writes CRLF to
+# stdout even when piped, which corrupts every `read -r`/`cp` consumer of this
+# output ("cannot stat '...suite'$'\r'"). set -o pipefail (part of this script's
+# top-level set -euo pipefail) keeps python's own exit code flowing through the
+# pipe, since tr always exits 0.
 _json() {
-  CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 - "$@" <<'PY'
+  { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 - "$@" <<'PY'
 import json, os, sys
 
 def load(path):
     with open(path) as f:
         return json.load(f)
+
+def find_item(catalog, category, name):
+    for it in catalog.get("assets", {}).get(category, []):
+        if it["name"] == name:
+            return it
+    return None
 
 mode = sys.argv[1]
 args = sys.argv[2:]
@@ -134,9 +151,15 @@ elif mode == "deps":
                     print(dep)
                 break
 
+elif mode == "suite_plugin_shaped":
+    catalog = load(os.environ["CATALOG_JSON"])
+    it = find_item(catalog, "suites", args[0])
+    sys.exit(0 if it and it.get("pluginShaped") else 1)
+
 else:
     sys.exit(f"unknown mode: {mode}")
 PY
+  } | tr -d '\r'
 }
 
 parse_args() {
@@ -310,6 +333,17 @@ select_assets() {
 
     while IFS=$'\t' read -r name src_rel; do
       [[ -z "$name" ]] && continue
+      # Copilot only understands the plugin-shaped suites install.sh knows how to
+      # translate (see translate_to_copilot()) — a suite without a
+      # .claude-plugin/plugin.json at its root (a drop-in Copilot payload, or a
+      # multi-harness suite that ships its own hand-authored Copilot variant
+      # already) has no Copilot form for install.sh to place here.
+      if is_copilot_suite_category "$category"; then
+        if ! _json suite_plugin_shaped "$name"; then
+          _warn "suite '$name' is not plugin-shaped — no Copilot translation available, skipped"
+          continue
+        fi
+      fi
       dest_rel="${template//"{name}"/$name}"
       printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$src_rel" "$dest_rel" >> "$SELECTION_FILE"
     done < "$items_file"
@@ -318,6 +352,35 @@ select_assets() {
       _warn "category '$category' has no assets in the catalog — nothing to select"
     fi
   done
+}
+
+# ── Copilot translation ──────────────────────────────────────────────────────
+# Mutates a freshly-copied, plugin-shaped suite directory in place so it matches
+# GitHub Copilot/VS Code's native agent-plugin layout instead of Claude Code's:
+#   - .claude-plugin/plugin.json -> plugin.json at the plugin root (per GitHub's
+#     own docs; the field names themselves — name/description/version/
+#     dependencies/skills — are unchanged, since both ecosystems share them).
+#   - agents/*.md -> agents/*.agent.md (Copilot's own filename convention,
+#     already used by this repo's hand-authored Copilot payloads).
+# select_assets() only ever routes pluginShaped suites here for the copilot
+# harness (see its per-item guard above) — drop-in Copilot payloads
+# (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
+# function and are copied wholesale, unchanged, same as before this existed.
+translate_to_copilot() {
+  local dest="$1" manifest="$dest/.claude-plugin/plugin.json" f base
+
+  if [[ -f "$manifest" ]]; then
+    mv "$manifest" "$dest/plugin.json"
+  fi
+  rm -rf "$dest/.claude-plugin"
+
+  if [[ -d "$dest/agents" ]]; then
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *.agent.md ]] && continue
+      base="${f%.md}"
+      mv "$f" "${base}.agent.md"
+    done < <(find "$dest/agents" -maxdepth 1 -name "*.md" -print0)
+  fi
 }
 
 # ── Dependency resolution ────────────────────────────────────────────────────
@@ -429,10 +492,12 @@ apply_selection() {
     dest="$dest_root/$dest_rel"
 
     if [[ $DRY_RUN -eq 1 ]]; then
+      local note=""
+      is_copilot_suite_category "$category" && note="  (copilot-translated)"
       if [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
-        printf '  [dry-run] %-9s %s -> %s\n' "$category" "$src_rel" "$dest"
+        printf '  [dry-run] %-9s %s -> %s%s\n' "$category" "$src_rel" "$dest" "$note"
       fi
       continue
     fi
@@ -446,6 +511,9 @@ apply_selection() {
     mkdir -p "$(dirname "$dest")"
     rm -rf "$dest"
     cp -R "$src" "$dest"
+    if is_copilot_suite_category "$category"; then
+      translate_to_copilot "$dest"
+    fi
     _ok "$dest_rel"
   done < "$SELECTION_FILE"
 }

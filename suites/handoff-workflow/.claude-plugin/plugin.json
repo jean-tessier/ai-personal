@@ -1,0 +1,13 @@
+{
+  "name": "handoff-workflow",
+  "version": "1.0.0",
+  "description": "Multi-session work loop: handoff.md carries state between sessions via resume-handoff/handoff-document, then ingest-handoff retires completed work into ADRs, docs/memory, and the handoff archive.",
+  "skills": [
+    "./handoff-document",
+    "./resume-handoff",
+    "./drive-to-completion",
+    "./ingest-handoff",
+    "./capture-deferred",
+    "./archive-handoff"
+  ]
+}

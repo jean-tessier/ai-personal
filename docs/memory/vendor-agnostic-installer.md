@@ -137,4 +137,52 @@ name, and `install.sh`'s `ALL_CATEGORIES`) to avoid implying a step-by-step work
 `scripts/validate.sh` checks it's valid JSON/a flat array/every path resolves, and `install.sh`'s
 `resolve_dependencies()` walks selected items to a fixed point and adds/skips/prompts/fails per the
 `--yes-deps`/`--no-deps` flags described above. See
-[ADR-0007](../adrs/ADR-0007-colocated-dependency-manifest.md) for the full decision record.
+[ADR-0009](../adrs/ADR-0009-colocated-dependency-manifest.md) for the full decision record.
+
+**2026-07-13 update**: suites and skills that fit Claude Code's/Copilot's native plugin
+shape now carry real `.claude-plugin/plugin.json` manifests, and the repo root has a
+`.claude-plugin/marketplace.json` listing them — see
+[ADR-0007](../adrs/ADR-0007-suites-as-native-plugins.md). Two `install.sh` behaviors
+followed from that:
+
+- **Dependency auto-include** — ~~selecting a suite also selects the skills it declares in its
+  `plugin.json` `dependencies` array~~. **Superseded on 2026-07-16** by the colocated
+  `dependencies.json` mechanism in the 2026-07-12 entry above (see
+  [ADR-0009](../adrs/ADR-0009-colocated-dependency-manifest.md)); `plugin_deps_json()` and
+  `plugin.json`'s `dependencies` key are gone. `pluginShaped` itself is untouched and still
+  gates Copilot translation below.
+- **Copilot translation**: `copilot`'s `harnesses.json` mapping now has a `suites` key,
+  but only suites `catalog.sh` marks `pluginShaped` (a root `.claude-plugin/plugin.json`)
+  are reachable through it — `select_assets()` filters the rest out per-item with a
+  one-line notice, same compatibility-by-omission spirit as ADR-0003 applied at item
+  instead of category granularity. Eligible suites get mechanically rewritten by
+  `translate_to_copilot()`: `agents/*.md` → `agents/*.agent.md`, and
+  `.claude-plugin/plugin.json` relocated to a root `plugin.json`. `tiered-escalation-suite`
+  and `tier-layered-teams/copilot/` are drop-in payloads, not plugin-shaped, and stay
+  permanently unreachable through this path — unchanged from before this decision.
+
+**Windows gotcha found while verifying this**: a native Windows `python3.exe` (as opposed
+to WSL or a Unix `python3`) writes `\r\n` to stdout even when piped, which corrupts every
+`_json()` caller that does `read -r ... < <(_json ...)` or `var=$(_json ...)` — the
+symptom is `cp: cannot stat '...suite'$'\r': No such file or directory` or a bash
+arithmetic/`[[` syntax error pointing at a value that looks right when printed.
+`install.sh`'s `_json()` and `validate.sh`'s equivalent python-heredoc call sites now
+pipe through `tr -d '\r'` to strip it; `set -o pipefail` (already part of both scripts'
+top-level `set -euo pipefail`) keeps the underlying python exit code flowing through that
+extra pipe stage. Any new python-heredoc call site added to either script needs the same
+`| tr -d '\r'`.
+
+**2026-07-16 update**: the two dependency mechanisms above (2026-07-12's colocated
+`dependencies.json` and 2026-07-13's `plugin.json`-array auto-include) were built in parallel on
+separate branches and collided when `feature/asset-dependency-manifest` merged. Both had defined a
+bash function named `resolve_dependencies()` at non-overlapping offsets in `install.sh` — so git's
+textual merge flagged **no conflict** while leaving two definitions and two call sites (bash keeps
+the later one). The merge kept ADR-0009's engine as the sole implementation and deleted the
+ADR-0007 one, along with `catalog.sh`'s `plugin_deps_json()`, `install.sh`'s now-unreferenced
+`suite_deps`/`item_path` `_json` modes, and `handoff-workflow`'s `plugin.json` `dependencies` key.
+The lesson worth keeping: when two branches implement the same feature, a clean `git merge` says
+nothing about whether the result is coherent — grep the merged file for duplicate definitions.
+Two `install.sh` behavior changes came with it: a non-interactive run with unresolved dependencies
+and neither `--yes-deps` nor `--no-deps` now **fails closed** (exit 1) instead of silently
+auto-adding, and dependencies are declared as category-prefixed paths (`skills/create-adr`), not
+bare skill names.

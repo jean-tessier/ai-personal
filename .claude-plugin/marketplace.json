@@ -1,0 +1,71 @@
+{
+  "name": "ai-personal",
+  "owner": {
+    "name": "Jean Tessier",
+    "email": "jean.tessier93@gmail.com"
+  },
+  "description": "Personal library of reusable Claude Code skills and orchestration suites.",
+  "plugins": [
+    {
+      "name": "atomic-commits",
+      "source": "./skills/atomic-commits",
+      "category": "skill",
+      "description": "Generate clean, atomic git commits from working changes with meaningful messages that explain why, not just what."
+    },
+    {
+      "name": "create-adr",
+      "source": "./skills/create-adr",
+      "category": "skill",
+      "description": "Create a new Architecture Decision Record (ADR) in docs/adrs/"
+    },
+    {
+      "name": "create-changelog",
+      "source": "./skills/create-changelog",
+      "category": "skill",
+      "description": "Create or append a dated entry to a skill's CHANGELOG.md"
+    },
+    {
+      "name": "fix-validation",
+      "source": "./skills/fix-validation",
+      "category": "skill",
+      "description": "Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship"
+    },
+    {
+      "name": "readme-maintenance",
+      "source": "./skills/readme-maintenance",
+      "category": "skill",
+      "description": "Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace"
+    },
+    {
+      "name": "yaml-frontmatter",
+      "source": "./skills/yaml-frontmatter",
+      "category": "skill",
+      "description": "Validate, add, or update YAML frontmatter on documentation files"
+    },
+    {
+      "name": "handoff-workflow",
+      "source": "./suites/handoff-workflow",
+      "category": "suite",
+      "description": "Multi-session work loop: handoff.md carries state between sessions via resume-handoff/handoff-document, then ingest-handoff retires completed work into ADRs, docs/memory, and the handoff archive.",
+      "dependencies": ["create-adr", "yaml-frontmatter"]
+    },
+    {
+      "name": "hub-and-spoke-orchestration",
+      "source": "./suites/hub-and-spoke-orchestration",
+      "category": "suite",
+      "description": "Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol."
+    },
+    {
+      "name": "tiered-team-orchestration",
+      "source": "./suites/tiered-team-orchestration",
+      "category": "suite",
+      "description": "A three-tier model-cost hierarchy — an Opus-tier core orchestrator plans and routes, Sonnet-tier research/coding/review team leads decompose and synthesize, Haiku-tier workers execute narrow tasks."
+    },
+    {
+      "name": "tier-layered-teams",
+      "source": "./suites/tier-layered-teams/claude-code",
+      "category": "suite",
+      "description": "A two-axis orchestration lattice crossing model-cost team tiers (Opus orchestrator, Sonnet leads, Haiku workers) with T0-T3 tool escalation — Claude Code-native variant."
+    }
+  ]
+}

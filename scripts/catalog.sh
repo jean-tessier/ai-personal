@@ -31,6 +31,15 @@ yaml_val() {
     | sed "s/['\"]//g"
 }
 
+# A suite is "plugin-shaped" when it carries a .claude-plugin/plugin.json at its own
+# root (not in a harness-variant subdir — see suites/tier-layered-teams's claude-code/
+# and copilot/ split, which is out of scope for this flag). Drives install.sh's
+# Copilot-translation eligibility; dependencies are read from the colocated
+# dependencies.json instead (see read_dependencies_json / ADR-0009).
+plugin_manifest() { printf '%s' "$1/.claude-plugin/plugin.json"; }
+
+is_plugin_shaped() { has_file "$(plugin_manifest "$1")"; }
+
 # ── Skills ────────────────────────────────────────────────────────────────────
 skills_json=""
 while IFS= read -r -d '' dir; do
@@ -55,9 +64,9 @@ while IFS= read -r -d '' dir; do
     rel="${f#"$dir"/}"
     files_json="${files_json:+$files_json,}\"$(quote "$rel")\""
   done < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null | sort -z)
-  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s],"dependencies":%s}' \
+  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s],"pluginShaped":%s,"dependencies":%s}' \
     "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json" \
-    "$(read_dependencies_json "$dir")")"
+    "$(is_plugin_shaped "$dir")" "$(read_dependencies_json "$dir")")"
   suites_json="${suites_json:+$suites_json,}$entry"
 done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
