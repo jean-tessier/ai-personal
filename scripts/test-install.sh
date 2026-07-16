@@ -237,6 +237,24 @@ test_missing_harnesses_json() {
   assert_not_contains "no raw python traceback" "$out" "Traceback"
 }
 
+test_malformed_dependencies_json_fails_cleanly() {
+  _head "malformed dependencies.json fails the catalog build cleanly (regression)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/fake-skill" "$src/suites"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  cp "$REPO/scripts/harnesses.json" "$src/scripts/harnesses.json"
+  printf -- '---\ndescription: test\n---\n' > "$src/skills/fake-skill/SKILL.md"
+  printf 'not json' > "$src/skills/fake-skill/dependencies.json"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness claude-code --scope project --assets skills --dry-run ) 2>&1 )"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "reports invalid JSON, names the file" "$out" "invalid JSON"
+  assert_not_contains "no raw python traceback" "$out" "Traceback"
+}
+
 test_deps_auto_added_with_yes_deps() {
   _head "--yes-deps auto-adds a suite's dependencies"
   local sb out code
@@ -357,6 +375,7 @@ test_category_without_mapping_skips
 test_missing_required_flags
 test_help_flag
 test_missing_harnesses_json
+test_malformed_dependencies_json_fails_cleanly
 test_deps_auto_added_with_yes_deps
 test_deps_missing_noninteractive_fails
 test_deps_no_deps_flag_skips
