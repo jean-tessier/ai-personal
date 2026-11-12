@@ -21,12 +21,18 @@ directory.
 ```yaml
 ---
 name: {skill-name}
-description: One sentence — when to use this skill and what it produces.
+description: What the skill does, the phrases that should trigger it, and what it is not for.
 ---
 ```
 
-The `description` field is consumed by `scripts/catalog.sh` and surfaced
-in the catalog. Keep it under 120 characters.
+The `description` is the trigger text Claude reads to decide when to load the skill. Aim for
+about 500 characters and never exceed 1536, because longer text is cut off in the skill listing.
+Lead with what the skill does and the phrases that should trigger it, and say what it is not for.
+Keep it on one line: `scripts/catalog.sh` reads only the first line of the field into the
+catalog.
+
+The 120-character limit applies only to the short text used in the skills table below and in
+`.claude-plugin/marketplace.json`, not to the frontmatter `description`.
 
 ## Available skills
 
