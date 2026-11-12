@@ -33,6 +33,7 @@ Recommended: <option>, because <one line>. <What the cheaper option lacks, if yo
 ## 5. Waves
 | Wave | Nodes (parallel) | Waits for |
 |---|---|---|
+| 1 | A1 | none: first wave |
 
 ## 6. Owner gates and pre-flight (in order)
 | Gate | What the owner does | When | Recommended |
@@ -46,7 +47,8 @@ Unattended part ends at: <e.g. reviewed PRs waiting for approval>.
 <Owner answers, dated. Decisions made on the owner's behalf, each with why and "Reverse:".>
 ```
 
-Keep the **Status** column current after every event; it is the board when there is no board.
+Fill every cell of every table: "none: <why>" where there is nothing to say, never a blank, "n/a", "-" or "—". Keep
+the **Status** column current after every event; it is the board when there is no board.
 
 ## 2. Builder brief
 
@@ -80,10 +82,10 @@ accepted ADRs it touches. Recommend one and say why in one paragraph. Mark every
 
 ## 4. Example rows (from a real plan)
 
-| Node | Task | Depends on | Who | Why this model | Size | Acceptance check | Stop condition |
-|---|---|---|---|---|---|---|---|
-| R1 | Red, deterministic: make the fourth response resume last so the test hangs in memory exactly as it does in CI | none | sonnet | Change fully specified; needs care to run the right filter | ~4 | the filtered test fails with the CI timeout signature | passes, or fails for another reason: stop, don't go on |
-| G1 | Green, test-only: claim the gate at call time; renewal waits until the fourth has read | R1 | sonnet (same builder) | Code shape given | ~12 | same test passes; full check, typecheck, package tests green | any other test red, or diff over 40 lines |
-| V1 | Prove it 50× against the real local database | G1 | orchestrator | Mechanical, needs Docker and the shell | 0 | no failure in 50 runs | one failure: the fix is wrong, don't queue |
-| M1 | Queue and merge once V1 and CI are green and the owner approved | V1, P1 | orchestrator | Glue | 0 | PR state MERGED | in the queue >20 min, or a stacked layer dequeued |
-| A1 | Approve the PR by number | V1 | OWNER | Merge authority | 0 | "approve #n" in chat | none: the owner's call |
+| Node | Task | Depends on | Who | Why this model | Size | Ships on merge | Acceptance check | Stop condition |
+|---|---|---|---|---|---|---|---|---|
+| R1 | Red, deterministic: make the fourth response resume last so the test hangs in memory exactly as it does in CI | none | sonnet | Change fully specified; needs care to run the right filter | ~4 | nothing (test only) | the filtered test fails with the CI timeout signature | passes, or fails for another reason: stop, don't go on |
+| G1 | Green, test-only: claim the gate at call time; renewal waits until the fourth has read | R1 | sonnet (same builder) | Code shape given | ~12 | nothing (test only) | same test passes; full check, typecheck, package tests green | any other test red, or diff over 40 lines |
+| V1 | Prove it 50× against the real local database | G1 | orchestrator | Mechanical, needs Docker and the shell | 0 | nothing | no failure in 50 runs | one failure: the fix is wrong, don't queue |
+| M1 | Queue and merge once V1 and CI are green and the owner approved | V1, P1 | orchestrator | Glue | 0 | the test fix on main | PR state MERGED | in the queue >20 min, a stacked layer dequeued, or the newest release on main is red: stop queueing and hold |
+| A1 | Approve the PR by number | V1 | OWNER | Merge authority | 0 | nothing | "approve #n" in chat | none: the owner's call |

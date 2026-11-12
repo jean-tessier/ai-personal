@@ -59,7 +59,9 @@ lines and stay under 400.
 - **Cut vertically** where you can: the smallest thing a person could name, through the layers it needs.
 - **Land it inert, switch it on last.** Every slice but the last does nothing in production; the last one wires it up.
 - **Prepare first:** a refactor that makes the feature easy is its own slice, behaviour-preserving.
-- **Expand, then contract** for stored data or contracts: reader first, writer later, removal last.
+- **Expand, then contract** for stored data or contracts: reader first, writer later, removal last. Recommend it
+  even for a rename; changing data in place (one migration, a temporary view) is a cheaper option for the owner to pick
+  in the decision round, with its risks.
 - **Decisions first:** a slice that depends on an owner decision waits for it.
 - **Stack only real dependencies**, and keep a stack to about five layers.
 - **Tests for behaviour that already works** can't fail first. Their acceptance check is a sabotage check instead:
@@ -72,13 +74,16 @@ essentials:
 - An opener: who it's for, what it decides, status, the owner decisions needed, and the premise check.
 - The options compared (Phase 2) and the ADR check (Phase 3).
 - One row per node: id, task, depends on, **who** (a model, `orchestrator`, or `OWNER`), why, size, what it ships on
-  merge, the acceptance check (a command or observable fact), and the stop condition. Every cell is filled. Build
-  and review nodes always have a real stop condition; owner, glue and "done" nodes may say "none: <why>", but never a
-  bare "n/a" or "-". Nodes that apply only for one answer ("if the owner picks B") and owner gates go in the same
-  table with every column filled and the condition in "Depends on", not in prose or a separate list.
-- A hold on failure: every node that queues, merges or releases has "the newest release on the main branch is red:
-  stop queueing and hold" in its stop condition. A watcher that only records a red release is not a hold.
+  merge, the acceptance check (a command or observable fact), and the stop condition. Build and review nodes always
+  have a real stop condition; owner, glue and "done" nodes may say "none: <why>". Nodes that apply only for one answer
+  ("if the owner picks B") and owner gates go in the same table with every column filled and the condition in
+  "Depends on", not in prose or a separate list.
+- A hold on failure: every node that queues, merges or releases, the owner's merge and release nodes included, has
+  "the newest release on the main branch is red: stop queueing and hold" in its stop condition, or "none: no release
+  pipeline" if the repo has none. A watcher that only records a red release is not a hold.
 - Waves, owner gates in order, and the definition of done.
+- **Every cell of every table in the file is filled.** Where there is nothing to say, write "none: <why>", never a
+  blank or a bare "n/a", "-" or "—". Check each table before writing.
 
 ### Choosing who does a node
 
@@ -152,9 +157,11 @@ If none of these applies, say so and why. One un-arranged write once held an ove
 
 ## When you were asked for a plan only
 
-Stop after Phase 5's questions are written (not asked, unless the user wants them asked) and Phase 6's list. The final
-message leads with the premise check and the decisions needed, then where the DAG file is, then the plan's cost, and
-says plainly that nothing was built, dispatched, pushed or changed.
+Stop after Phase 5's questions (written in the reply with the recommendation and consequences, not asked through
+AskUserQuestion unless the user wants that) and Phase 6's list. The final message leads with the premise check and the
+decisions needed, then where the DAG file is, then the plan's cost; says plainly that nothing was built, dispatched,
+pushed or changed; and ends by asking the owner to rule on the decisions. A DAG table in the reply keeps every
+column, stop conditions included.
 
 ## Gotchas
 
