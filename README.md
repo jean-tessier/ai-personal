@@ -21,6 +21,7 @@ be dropped into any project, professional or otherwise.
 | [create-adr](skills/create-adr/SKILL.md) | Writes a new Architecture Decision Record to `docs/adrs/`, keeping its index in sync | vendor-agnostic |
 | [create-changelog](skills/create-changelog/SKILL.md) | Creates or appends a dated `CHANGELOG.md` entry for a skill | vendor-agnostic |
 | [fix-validation](skills/fix-validation/SKILL.md) | Runs `scripts/validate.sh`, auto-fixes mechanical structural issues, reports what needs manual authorship | this repo |
+| [plan-dag](skills/plan-dag/SKILL.md) | Plans multi-part work as a DAG of small slices with cost-appropriate models, then orchestrates builder subagents wave by wave | vendor-agnostic |
 | [readme-maintenance](skills/readme-maintenance/SKILL.md) | Audits and refreshes every README in a repo against a quality rubric | vendor-agnostic |
 | [yaml-frontmatter](skills/yaml-frontmatter/SKILL.md) | Validates, adds, or updates YAML frontmatter on documentation files | vendor-agnostic |
 

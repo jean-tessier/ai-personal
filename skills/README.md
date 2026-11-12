@@ -36,5 +36,6 @@ in the catalog. Keep it under 120 characters.
 | [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
 | [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's CHANGELOG.md |
 | [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
+| [plan-dag](plan-dag/SKILL.md) | Plan multi-part work as a dependency graph of small slices with cost-appropriate models, then dispatch builder subagents wave by wave |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter on documentation files |
