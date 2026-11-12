@@ -1,7 +1,7 @@
 ---
 date: 2026-11-12
 description: Smoke and pilot runs of the plan-dag eval harness; validates the harness, not a verdict on the skill
-status: active
+status: superseded
 ---
 
 # plan-dag evals: smoke and pilot (2026-11-12)
