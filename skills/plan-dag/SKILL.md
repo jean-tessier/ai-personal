@@ -1,6 +1,6 @@
 ---
 name: plan-dag
-description: Plan and orchestrate multi-part work as a dependency graph (DAG) of small, independently shippable slices — each with a cost-appropriate model, an acceptance check and a stop condition — choosing the cheapest plan that meets the goal, raising every possible conflict with accepted decisions (ADRs) as an owner question, then batching the owner's decisions, running a pre-flight, dispatching builder subagents wave by wave, and keeping the DAG file as the live status. Use whenever the user asks to "generate a DAG", plan a feature or migration across several PRs, pick "the cost-appropriate model for each task", parallelise work across subagents, run something hands-off or overnight, or front-load questions to maximise hands-off execution — even if they never say "DAG". Works in any repo, with or without project rules. Not for a single small change you can just make.
+description: Plan multi-PR work as a dependency graph (DAG) of small shippable slices, each with a cost-appropriate model, acceptance check and stop condition; ask the owner every decision and possible ADR conflict up front, then dispatch builder subagents in waves. Use when asked to plan a feature, refactor or migration across several PRs, turn a spec into an execution plan with decision checkpoints, generate a DAG, parallelise work across subagents, or run work hands-off or overnight, even without the word DAG. Not for one small change, a handoff.md, or non-code planning.
 ---
 
 # Plan as a DAG, then orchestrate it
