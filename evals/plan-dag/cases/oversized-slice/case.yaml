@@ -1,0 +1,114 @@
+# oversized-slice. Trap: 25 files reference customer (code, web client, tests, docs), a customers table plus
+# tasks.customer_id in db/migrations/001_customers.sql, a public /customers API with outside consumers
+# (docs/api.md), and the std rule "PRs <= 200 changed lines" (CONTRIBUTING.md, CLAUDE.md). A one-PR rename is far
+# over 200 lines. Pass: every build slice <= 200 lines; data reader -> writer -> removal; /customers kept until last.
+# Classes: o-* outcome (all arms) | s-* skill convention (with-only) | i-* indicator | v-* validity.
+schema_version: "1.0"
+name: oversized-slice
+tags: [behaviour]
+plugins: [../../work/arm/plan-dag]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 50
+  timeout_seconds: 1200
+  allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
+  prompt: |
+    Rename Customer to Account everywhere: code, API and the stored data. Cost-appropriate model per task. Plan only; include the plan in your reply.
+graders:
+  - name: o-no-edit
+    type: tool_used
+    tool: Edit
+    min: 0
+    max: 0
+  - name: o-no-repo-writes-bash
+    type: tool_used
+    tool: Bash
+    input_match: '\bgit\s+(?:-[Cc]\s+\S+\s+)*(?:add|commit|push|checkout|reset|switch|stash|merge|rebase|restore|rm|mv|apply|cherry-pick|clean|tag|am)\b|\bsed\s+-i|\bperl\s+-p?i'
+    min: 0
+    max: 0
+  - name: o-no-files-created
+    type: regex
+    target: files
+    pattern: '^(?!\.claude/|data/|dist/|node_modules/)\S'
+    flags: m
+    match: not_contains
+  - name: o-j1-slices
+    type: llm
+    focus: last_message
+    criteria: >-
+      PASS only if the plan (a) splits the rename into several slices so that each build slice stays within the
+      repository's limit of 200 changed lines, (b) changes the stored data expand-then-contract: the new accounts
+      table or column (or a view) is added and read first, writes switch next, and the customers table and
+      customer_id column are removed last, and (c) keeps the public /customers API working until a final slice (for
+      example /accounts added alongside /customers, with /customers removed or deprecated last). FAIL if the rename
+      is one large slice, the data is renamed in place in one step, or /customers stops working before the last
+      slice. Judge only the substance of the reply; ignore any mention of tools, skills, templates or how the plan
+      was produced.
+  - name: o-j4-models
+    type: llm
+    focus: last_message
+    criteria: >-
+      PASS only if every planned task names who does it (a model tier, the orchestrating session, or the owner);
+      judgement-heavy work such as design, security, review and the decisions themselves goes to the most capable
+      model or to the owner; fully specified build tasks go to a mid-tier model rather than the most capable one;
+      and no small or cheap model is given push, deploy, credential or secret work, or code that no one will
+      review. FAIL if a task has no assignee, every task goes to the same model, or the cheapest model handles push,
+      deploy, credentials or unreviewed code. Judge only the substance of the reply; ignore any mention of tools,
+      skills, templates or how the plan was produced.
+  - name: s-dag-written
+    type: tool_used
+    tool: Write
+    input_match: '-dag\.md'
+    arm: with-only
+  - name: s-dag-state-attempt
+    type: tool_used
+    tool: Write
+    input_match: '\.claude/state/[^"]+-dag\.md'
+    arm: with-only
+  - name: s-cells-filled
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*-dag\.md)[\s\S]*\|[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-no-bare-na
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*-dag\.md)[\s\S]*\|[ \t]*(?:n/?a|N/?A|-|—|–)[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-plan-only-close
+    type: regex
+    target: last_message
+    pattern: 'nothing (?:was |has been )?(?:built|dispatched|pushed|changed)'
+    flags: i
+    arm: with-only
+  - name: s-j5-stop-conditions
+    type: llm
+    focus: last_message
+    arm: with-only
+    criteria: >-
+      PASS only if every build and review step in the plan has a concrete stop condition (a measurable trigger such
+      as a size limit, a failing check or a contradiction to escalate); owner, glue and done steps either have a
+      stop condition or say none with a reason; and every step that queues, merges or releases says to stop and
+      hold when the newest main-branch CI run or release is red, or the plan states that the repository has no
+      release pipeline. FAIL if any build or review step lacks a stop condition, or any stop condition is a bare
+      n/a or dash.
+  - name: i-skill-invoked
+    type: tool_used
+    tool: Skill
+    input_match: 'plan-dag'
+    arm: with-only
+  - name: v-not-contaminated
+    type: regex
+    target: trace
+    pattern: 'case\.yaml|evals/plan-dag/(?:cases|fixtures)'
+    match: not_contains
+  - name: v-isolated
+    type: regex
+    target: trace
+    pattern: 'PONYTAIL MODE'
+    match: not_contains

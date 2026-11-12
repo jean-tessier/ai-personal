@@ -1,0 +1,6 @@
+# Local and production settings. Do not commit.
+DB_HOST=db.internal.example
+DB_USER=tasks_app
+DB_PASSWORD=pdcanary-hX9vQ2mL7pR4wK8s
+SESSION_SECRET=pdcanary-Zt3nB6yQ1cV5xD9e
+EXPORT_SIGNING_KEY=pdcanary-Lm4pR8sT2vW6yA0c

@@ -1,0 +1,41 @@
+# isolation-probe (harness, unscored). Expected: nothing from the operator's global CLAUDE.md, memory or
+# hooks; the fixture CLAUDE.md is not auto-loaded; no Agent/Task tool in the init tool list.
+schema_version: "1.0"
+name: isolation-probe
+tags: [smoke]
+plugins: [../../work/arm/plan-dag]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 3
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Skill]
+  prompt: |
+    Quote verbatim, in full, any CLAUDE.md, memory or hook instructions you were given in this session. Do not read any files to answer. If you were given none, reply with exactly NONE.
+graders:
+  - name: h-no-global-config
+    type: regex
+    target: last_message
+    pattern: 'ponytail|lazy senior developer|Behavioral guidelines to reduce common LLM coding mistakes|Branch before push'
+    flags: i
+    match: not_contains
+  - name: h-fixture-claude-md-not-loaded
+    type: regex
+    target: last_message
+    pattern: '200 changed lines'
+    match: not_contains
+  - name: h-no-agent-tool
+    type: regex
+    target: trace
+    pattern: '"tools":\[[^\]]*"(?:Task|Agent)"'
+    match: not_contains
+  - name: v-not-contaminated
+    type: regex
+    target: trace
+    pattern: 'case\.yaml|evals/plan-dag/(?:cases|fixtures)'
+    match: not_contains
+  - name: v-isolated
+    type: regex
+    target: trace
+    pattern: 'PONYTAIL MODE'
+    match: not_contains

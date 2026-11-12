@@ -12,6 +12,7 @@ be dropped into any project, professional or otherwise.
 | `suites/` | Grouped, inter-referential skill/prompt collections that only make sense as a set. See [`suites/README.md`](suites/README.md) |
 | `docs/` | ADRs, operational memory, and archived session handoffs — the "why" behind this repo's own shape |
 | `scripts/` | Catalog generation and structural validation |
+| `evals/` | Dev-only behaviour and trigger evals for skills, run with `claude plugin eval`; never installed. See [`evals/README.md`](evals/README.md) |
 
 ## Skills
 

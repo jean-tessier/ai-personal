@@ -1,0 +1,5 @@
+# tasks-api
+
+- Keep each PR at or under 200 changed lines (additions plus deletions, tests included). Split anything larger.
+- Every PR needs one approving review and a green CI run before merge. A maintainer squash-merges.
+- Decisions live in docs/adrs/. Read them before proposing architecture changes.
