@@ -21,6 +21,8 @@ bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed v
 bash scripts/test-install-docker.sh   # same tests, fully isolated in a container (needs Docker running)
 node --test scripts/*.test.ts     # unit tests for the dev-only Node tooling in scripts/
 npx tsc --noEmit                  # typecheck the Node tooling
+bash evals/plan-dag/run.sh <smoke|pilot|behaviour|trigger>   # dev-only skill evals; COSTS REAL MONEY per run, read evals/README.md first
+node --test evals/plan-dag/report.test.mjs                   # unit tests for the eval report script (free)
 npm run ingest-asset -- <path-to-source-file> [--dry-run]   # classify + scaffold a new skill or suite component
 ```
 
@@ -58,6 +60,11 @@ categories awaiting their first asset. If a new kind of asset (agent prompts, MC
 distributable skill packs, eval cases, etc.) gets real content again, add it back to this table,
 `scripts/catalog.sh`, `scripts/validate.sh`, `scripts/harnesses.json`, and `install.sh`'s
 `ALL_CATEGORIES` array and `categories` mode together; don't let one drift ahead of the others.
+
+`evals/` (skill evals run through `claude plugin eval`) is dev-only tooling, not an asset category:
+it is never installed and stays out of `install.sh`, `scripts/catalog.sh`, `scripts/validate.sh`
+and `scripts/harnesses.json`. This is the one exception to the "eval cases" note above — see
+`docs/adrs/ADR-0010-evals-are-dev-only-tooling.md`.
 
 **A suite may additionally carry a root `.claude-plugin/plugin.json`**, making it a real
 Claude Code/Copilot plugin — `scripts/catalog.sh` surfaces this per suite as `pluginShaped`
