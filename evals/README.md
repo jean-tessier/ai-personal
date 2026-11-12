@@ -2,7 +2,7 @@
 
 Dev-only evals for skills in this repo, run with `claude plugin eval` (early access; Claude Code CLI 2.1.322 is
 pinned). This is not an asset category: nothing here is installed by `install.sh` or listed by `scripts/catalog.sh`.
-The ADR recording this decision is a later, owner-approved step.
+The ADR recording this decision is [ADR-0010](../docs/adrs/ADR-0010-evals-are-dev-only-tooling.md).
 
 Today there is one eval set, `evals/plan-dag/`.
 
