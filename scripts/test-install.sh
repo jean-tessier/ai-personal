@@ -170,12 +170,33 @@ test_unknown_asset_category() {
 
 test_category_without_mapping_skips() {
   _head "category with no mapping for harness warns, does not fail"
-  local sb out code
+  # copilot now has a mapping for both real categories (skills, suites), so
+  # this repo's own harnesses.json no longer has a live example of the gap
+  # this test covers (ADR-0003's compatibility-by-omission path). Exercise it
+  # against a synthetic harness instead, reusing this repo's real skills/
+  # suites content via --local so catalog.sh still has real items to select.
+  local sb src out code
   sb="$(new_sandbox)"
-  out="$(run_install "$sb" --harness copilot --scope project --assets suites 2>&1)"; code=$?
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  cp -R "$REPO/skills" "$src/skills"
+  cp -R "$REPO/suites" "$src/suites"
+  cat > "$src/scripts/harnesses.json" <<'JSON'
+{
+  "partial-harness": {
+    "label": "Partial Harness",
+    "scopes": { "project": ".partial" },
+    "mapping": { "skills": "skills/{name}" }
+  }
+}
+JSON
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness partial-harness --scope project --assets suites ) 2>&1 )"; code=$?
   assert_exit "exits 0" 0 "$code"
   assert_contains "warns no mapping" "$out" "no mapping"
-  assert_missing "nothing installed" "$sb/cwd/.github"
+  assert_missing "nothing installed" "$sb/cwd/.partial"
 }
 
 test_missing_required_flags() {
@@ -216,6 +237,70 @@ test_missing_harnesses_json() {
   assert_not_contains "no raw python traceback" "$out" "Traceback"
 }
 
+test_malformed_dependencies_json_fails_cleanly() {
+  _head "malformed dependencies.json fails the catalog build cleanly (regression)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/fake-skill" "$src/suites"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  cp "$REPO/scripts/harnesses.json" "$src/scripts/harnesses.json"
+  printf -- '---\ndescription: test\n---\n' > "$src/skills/fake-skill/SKILL.md"
+  printf 'not json' > "$src/skills/fake-skill/dependencies.json"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness claude-code --scope project --assets skills --dry-run ) 2>&1 )"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "reports invalid JSON, names the file" "$out" "invalid JSON"
+  assert_not_contains "no raw python traceback" "$out" "Traceback"
+}
+
+test_deps_auto_added_with_yes_deps() {
+  _head "--yes-deps auto-adds a suite's dependencies"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run --yes-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "dry-run lists skills/create-adr" "$out" "skills/create-adr"
+  assert_contains "dry-run lists skills/yaml-frontmatter" "$out" "skills/yaml-frontmatter"
+}
+
+test_deps_missing_noninteractive_fails() {
+  _head "missing deps, no flags, no TTY: fails and names the paths (same under --dry-run)"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "names skills/create-adr" "$out" "skills/create-adr"
+  assert_contains "names skills/yaml-frontmatter" "$out" "skills/yaml-frontmatter"
+
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run 2>&1)"; code=$?
+  assert_exit "exits 1 under --dry-run too" 1 "$code"
+  assert_contains "names skills/create-adr under --dry-run" "$out" "skills/create-adr"
+  assert_contains "names skills/yaml-frontmatter under --dry-run" "$out" "skills/yaml-frontmatter"
+}
+
+test_deps_no_deps_flag_skips() {
+  _head "--no-deps opts out, does not silently add the dependency"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets suites --dry-run --no-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "warns it is skipping dependencies" "$out" "skipping dependencies"
+  assert_not_contains "does not add skills/create-adr as a dry-run entry" "$out" "skills/create-adr ->"
+}
+
+test_deps_already_selected_no_duplicate() {
+  _head "a dependency already selected directly is not duplicated"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets skills,suites --dry-run --yes-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  [[ "$(grep -c "skills/create-adr" <<< "$out")" == "1" ]] \
+    && _ok "skills/create-adr appears exactly once" \
+    || _fail "skills/create-adr appears exactly once (got $(grep -c "skills/create-adr" <<< "$out"))"
+}
+
 test_interactive_picker_fallback() {
   _head "interactive numbered picker (no fzf/gum on PATH)"
   if command -v fzf &>/dev/null || command -v gum &>/dev/null; then
@@ -233,6 +318,51 @@ test_interactive_picker_fallback() {
   assert_exists "picker installed at least one skill" "$sb/cwd/.claude/skills/atomic-commits/SKILL.md"
 }
 
+# Complements test_deps_no_deps_flag_skips (which asserts --no-deps's dry-run
+# output): this one runs a real install and asserts the resulting on-disk tree.
+test_no_deps_flag_skips_dependencies() {
+  _head "--no-deps installs a suite without its declared dependencies"
+  local sb code
+  sb="$(new_sandbox)"
+  run_install "$sb" --harness claude-code --scope project --assets suites --no-deps >/dev/null 2>&1; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "handoff-workflow itself still installed" \
+    "$sb/cwd/.claude/suites/handoff-workflow/README.md"
+  assert_missing "no skills/ dir created — no dependency pulled in" \
+    "$sb/cwd/.claude/skills"
+}
+
+test_copilot_suite_translation() {
+  _head "copilot harness translates a plugin-shaped suite's agents/ and manifest"
+  local sb code
+  sb="$(new_sandbox)"
+  # --no-deps keeps this focused on translation: handoff-workflow declares
+  # dependencies, and a flagless non-interactive run now fails closed (ADR-0009)
+  # rather than auto-adding them, which has nothing to do with what's asserted here.
+  run_install "$sb" --harness copilot --scope project --assets suites --no-deps >/dev/null 2>&1; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "agents/*.md renamed to *.agent.md" \
+    "$sb/cwd/.github/suites/hub-and-spoke-orchestration/agents/01-orchestrator.agent.md"
+  assert_missing "original .md name no longer present" \
+    "$sb/cwd/.github/suites/hub-and-spoke-orchestration/agents/01-orchestrator.md"
+  assert_exists "plugin.json moved to the plugin root" \
+    "$sb/cwd/.github/suites/hub-and-spoke-orchestration/plugin.json"
+  assert_missing ".claude-plugin/ not carried into the copilot copy" \
+    "$sb/cwd/.github/suites/hub-and-spoke-orchestration/.claude-plugin"
+}
+
+test_copilot_skips_non_plugin_shaped_suite() {
+  _head "copilot harness skips a suite with no Copilot-native form"
+  local sb out code
+  sb="$(new_sandbox)"
+  # --no-deps for the same reason as above — see test_copilot_suite_translation.
+  out="$(run_install "$sb" --harness copilot --scope project --assets suites --no-deps 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "warns it's not plugin-shaped" "$out" "not plugin-shaped"
+  assert_missing "tiered-escalation-suite (drop-in payload) not copied by install.sh" \
+    "$sb/cwd/.github/suites/tiered-escalation-suite"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -245,7 +375,15 @@ test_category_without_mapping_skips
 test_missing_required_flags
 test_help_flag
 test_missing_harnesses_json
+test_malformed_dependencies_json_fails_cleanly
+test_deps_auto_added_with_yes_deps
+test_deps_missing_noninteractive_fails
+test_deps_no_deps_flag_skips
+test_deps_already_selected_no_duplicate
 test_interactive_picker_fallback
+test_no_deps_flag_skips_dependencies
+test_copilot_suite_translation
+test_copilot_skips_non_plugin_shaped_suite
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then

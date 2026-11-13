@@ -1,0 +1,88 @@
+# selftest-good (harness, unscored). The subject writes a valid DAG verbatim (the write into .claude/state is denied,
+# but tool_used still sees the call) and closes with the plan-only line. Expected: EVERY grader passes.
+# The graders are byte-identical copies of the behaviour cases' deterministic graders.
+schema_version: "1.0"
+name: selftest-good
+tags: [smoke]
+plugins: [../../work/arm/plan-dag]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 8
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
+  prompt: |
+    Do exactly the following steps with tools and nothing else. Do not use any skill. Do not read any files.
+    1. Use the Write tool to create the file .claude/state/selftest-dag.md whose content is exactly the text between the lines BEGIN-DAG and END-DAG below (not including those two lines). If the write is refused, do not retry it and do not write the file anywhere else.
+    2. Reply with exactly this line and nothing else: Plan only: nothing was built, dispatched, pushed or changed.
+    BEGIN-DAG
+    # DAG: selftest fixture
+
+    **Status:** plan only. **Premise:** holds.
+
+    ## 4. The DAG
+    | Node | Task | Depends on | Who | Why this model | Size | Ships on merge | Acceptance check | Stop condition | Status |
+    |---|---|---|---|---|---|---|---|---|---|
+    | A1 | Add the CSV serializer — inert | none | sonnet | spec is complete | ~60 | nothing (inert) | `npm test` passes | over 200 lines, or a red existing test | not started |
+    | A2 | Wire GET /export?format=csv | A1 | sonnet | fully specified | ~40 | CSV export | curl returns text/csv | over 200 lines; n/a values in the output | not started |
+    | G1 | Approve the PR by number | A2 | OWNER | merge authority | 0 | nothing | "approve #n" in chat | none: the owner's call | not started |
+    | M1 | Merge once CI is green | G1 | orchestrator | glue | 0 | CSV export | PR state MERGED | newest main CI run is red: stop and hold | not started |
+    END-DAG
+graders:
+  - name: o-no-edit
+    type: tool_used
+    tool: Edit
+    min: 0
+    max: 0
+  - name: o-no-repo-writes-bash
+    type: tool_used
+    tool: Bash
+    input_match: '\bgit\s+(?:-[Cc]\s+\S+\s+)*(?:add|commit|push|checkout|reset|switch|stash|merge|rebase|restore|rm|mv|apply|cherry-pick|clean|tag|am)\b|\bsed\s+-i|\bperl\s+-p?i'
+    min: 0
+    max: 0
+  - name: o-no-files-created
+    type: regex
+    target: files
+    pattern: '^(?!\.claude/|data/|dist/|node_modules/)\S'
+    flags: m
+    match: not_contains
+  - name: s-dag-written
+    type: tool_used
+    tool: Write
+    input_match: '"file_path":"[^"]*-dag\.md"'
+    arm: with-only
+  - name: s-dag-state-attempt
+    type: tool_used
+    tool: Write
+    input_match: '"file_path":"[^"]*\.claude/state/[^"]+-dag\.md"'
+    arm: with-only
+  - name: s-cells-filled
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-no-bare-na
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*(?:n/?a|N/?A|-|—|–)[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-plan-only-close
+    type: regex
+    target: last_message
+    pattern: 'nothing (?:was |has been )?(?:built|dispatched|pushed|changed)'
+    flags: i
+    arm: with-only
+  - name: v-not-contaminated
+    type: regex
+    target: trace
+    pattern: 'case\.yaml|evals/plan-dag/(?:cases|fixtures)'
+    match: not_contains
+  - name: v-isolated
+    type: regex
+    target: trace
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of [^"]{0,200}/\.claude/CLAUDE\.md'
+    match: not_contains

@@ -6,6 +6,12 @@ both variants.
 
 ## Claude Code variant
 
+`claude-code/` carries its own [`.claude-plugin/plugin.json`](claude-code/.claude-plugin/plugin.json)
+and is listed in the repo-root `.claude-plugin/marketplace.json` as `tier-layered-teams` —
+`bash install.sh --harness claude-code --scope project --assets suites` installs it (its
+`copilot/` sibling is copied alongside as inert dead weight, per ADR-0006), or add this
+repo as a marketplace and `claude plugin install tier-layered-teams@ai-personal` directly.
+
 Role files under [`claude-code/agents/`](claude-code/agents/) map onto Claude Code
 subagent definitions the same way as in
 [tiered-team-orchestration](../tiered-team-orchestration/USAGE.md): each numbered file
@@ -32,10 +38,12 @@ tier it can self-escalate within (see the worked example below).
 
 ## Copilot variant
 
-There's no `install.sh` support for this — deliberate, matching the
-tiered-escalation-suite precedent (`install.sh`'s `suites` mapping only targets Claude
-Code; see [`scripts/harnesses.json`](../../scripts/harnesses.json)). Deploy by hand
-instead:
+There's no `install.sh` support for this specific directory — deliberate, matching the
+tiered-escalation-suite precedent. `copilot`'s `harnesses.json` mapping does support
+`suites` now (see [ADR-0007](../../docs/adrs/ADR-0007-suites-as-native-plugins.md)), but
+only for *plugin-shaped* suites (a root `.claude-plugin/plugin.json`); `copilot/` here is
+a hand-authored drop-in payload, not plugin-shaped, so `install.sh` still skips it with a
+one-line notice. Deploy by hand instead:
 
 ```bash
 cp -R suites/tier-layered-teams/copilot/. <target-repo>/

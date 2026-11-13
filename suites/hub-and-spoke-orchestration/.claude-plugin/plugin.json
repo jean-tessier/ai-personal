@@ -1,0 +1,5 @@
+{
+  "name": "hub-and-spoke-orchestration",
+  "version": "1.0.0",
+  "description": "Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol."
+}

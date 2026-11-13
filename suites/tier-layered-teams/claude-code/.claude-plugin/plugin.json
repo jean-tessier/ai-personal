@@ -1,0 +1,5 @@
+{
+  "name": "tier-layered-teams",
+  "version": "1.0.0",
+  "description": "A two-axis orchestration lattice crossing model-cost team tiers (Opus orchestrator, Sonnet leads, Haiku workers) with T0-T3 tool escalation — Claude Code-native variant."
+}

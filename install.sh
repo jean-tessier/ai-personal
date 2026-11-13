@@ -14,6 +14,8 @@
 #                       is attached — via fzf, gum, or a numbered prompt)
 #   --dry-run           print planned copy operations; write nothing
 #   --force             overwrite existing destination files/dirs (default: skip)
+#   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
+#   --no-deps           skip dependencies instead of adding/prompting
 #   -h, --help          show usage
 #
 # Exit:   0 success · 1 bad input or fetch/copy failure
@@ -32,11 +34,17 @@ _fail() { printf "${RED}  FAIL${NC}  %s\n" "$1" >&2; }
 _warn() { printf "${YLW}  note${NC}  %s\n" "$1"; }
 _head() { printf "\n${BLD}── %s ──${NC}\n" "$1"; }
 
+# True for the one (harness, category) pair install.sh currently knows how to
+# translate a plugin-shaped item for post-copy (see translate_to_copilot()).
+# Centralized so select_assets()'s eligibility filter and apply_selection()'s
+# dry-run note / real translate-call can't drift out of sync with each other.
+is_copilot_suite_category() { [[ "$HARNESS" == "copilot" && "$1" == "suites" ]]; }
+
 command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/harness JSON"; exit 1; }
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force]
+Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force] [--yes-deps|--no-deps]
 
   --harness   harness key from scripts/harnesses.json (e.g. claude-code, copilot)
   --scope     scope key declared for that harness (e.g. project, user)
@@ -44,6 +52,8 @@ Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [-
               if omitted with a TTY attached, pick interactively via fzf/gum/prompt)
   --dry-run   print planned copy operations; write nothing
   --force     overwrite existing destination files/dirs (default: skip existing)
+  --yes-deps  auto-add dependencies (from dependencies.json) with no prompt
+  --no-deps   skip dependencies instead of adding/prompting
   -h, --help  show this help
 USAGE
 }
@@ -53,6 +63,8 @@ HARNESS=""
 SCOPE=""
 DRY_RUN=0
 FORCE=0
+YES_DEPS=0
+NO_DEPS=0
 LOCAL_PATH=""   # test seam: skip network fetch, use a local checkout instead
 
 WORK="$(mktemp -d)"
@@ -64,13 +76,24 @@ HARNESSES_JSON=""
 CATEGORIES=()
 
 # ── JSON access (single dispatcher; python3 is the only non-stdlib dependency) ─
+# ponytail: piped through `tr -d '\r'` — a native Windows python3 writes CRLF to
+# stdout even when piped, which corrupts every `read -r`/`cp` consumer of this
+# output ("cannot stat '...suite'$'\r'"). set -o pipefail (part of this script's
+# top-level set -euo pipefail) keeps python's own exit code flowing through the
+# pipe, since tr always exits 0.
 _json() {
-  CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 - "$@" <<'PY'
+  { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 - "$@" <<'PY'
 import json, os, sys
 
 def load(path):
     with open(path) as f:
         return json.load(f)
+
+def find_item(catalog, category, name):
+    for it in catalog.get("assets", {}).get(category, []):
+        if it["name"] == name:
+            return it
+    return None
 
 mode = sys.argv[1]
 args = sys.argv[2:]
@@ -117,9 +140,26 @@ elif mode == "items":
     for name, path in items:
         print(f"{name}\t{path}")
 
+elif mode == "deps":
+    catalog = load(os.environ["CATALOG_JSON"])
+    assets = catalog.get("assets", {})
+    target_path = args[0]
+    for cat in ("skills", "suites"):
+        for it in assets.get(cat, []):
+            if it["path"] == target_path:
+                for dep in it.get("dependencies", []):
+                    print(dep)
+                break
+
+elif mode == "suite_plugin_shaped":
+    catalog = load(os.environ["CATALOG_JSON"])
+    it = find_item(catalog, "suites", args[0])
+    sys.exit(0 if it and it.get("pluginShaped") else 1)
+
 else:
     sys.exit(f"unknown mode: {mode}")
 PY
+  } | tr -d '\r'
 }
 
 parse_args() {
@@ -130,6 +170,8 @@ parse_args() {
       --scope)   SCOPE="$2"; shift 2 ;;
       --dry-run) DRY_RUN=1; shift ;;
       --force)   FORCE=1; shift ;;
+      --yes-deps) YES_DEPS=1; shift ;;
+      --no-deps)  NO_DEPS=1; shift ;;
       --local)   LOCAL_PATH="$2"; shift 2 ;;  # undocumented test seam
       -h|--help) usage; exit 0 ;;
       *) _fail "unknown flag: $1"; usage; exit 1 ;;
@@ -142,6 +184,7 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
+  if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
 }
 
 # ── Fetch (no git — curl + tar only) ────────────────────────────────────────
@@ -291,6 +334,17 @@ select_assets() {
 
     while IFS=$'\t' read -r name src_rel; do
       [[ -z "$name" ]] && continue
+      # Copilot only understands the plugin-shaped suites install.sh knows how to
+      # translate (see translate_to_copilot()) — a suite without a
+      # .claude-plugin/plugin.json at its root (a drop-in Copilot payload, or a
+      # multi-harness suite that ships its own hand-authored Copilot variant
+      # already) has no Copilot form for install.sh to place here.
+      if is_copilot_suite_category "$category"; then
+        if ! _json suite_plugin_shaped "$name"; then
+          _warn "suite '$name' is not plugin-shaped — no Copilot translation available, skipped"
+          continue
+        fi
+      fi
       dest_rel="${template//"{name}"/$name}"
       printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$src_rel" "$dest_rel" >> "$SELECTION_FILE"
     done < "$items_file"
@@ -298,6 +352,118 @@ select_assets() {
     if [[ $found -eq 0 ]]; then
       _warn "category '$category' has no assets in the catalog — nothing to select"
     fi
+  done
+}
+
+# ── Copilot translation ──────────────────────────────────────────────────────
+# Mutates a freshly-copied, plugin-shaped suite directory in place so it matches
+# GitHub Copilot/VS Code's native agent-plugin layout instead of Claude Code's:
+#   - .claude-plugin/plugin.json -> plugin.json at the plugin root (per GitHub's
+#     own docs; the field names themselves — name/description/version/
+#     dependencies/skills — are unchanged, since both ecosystems share them).
+#   - agents/*.md -> agents/*.agent.md (Copilot's own filename convention,
+#     already used by this repo's hand-authored Copilot payloads).
+# select_assets() only ever routes pluginShaped suites here for the copilot
+# harness (see its per-item guard above) — drop-in Copilot payloads
+# (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
+# function and are copied wholesale, unchanged, same as before this existed.
+translate_to_copilot() {
+  local dest="$1" manifest="$dest/.claude-plugin/plugin.json" f base
+
+  if [[ -f "$manifest" ]]; then
+    mv "$manifest" "$dest/plugin.json"
+  fi
+  rm -rf "$dest/.claude-plugin"
+
+  if [[ -d "$dest/agents" ]]; then
+    while IFS= read -r -d '' f; do
+      [[ "$f" == *.agent.md ]] && continue
+      base="${f%.md}"
+      mv "$f" "${base}.agent.md"
+    done < <(find "$dest/agents" -maxdepth 1 -name "*.md" -print0)
+  fi
+}
+
+# ── Dependency resolution ────────────────────────────────────────────────────
+# Runs after select_assets(), before apply_selection(). Each selected item may
+# declare deps via dependencies.json (surfaced by catalog.sh as
+# "dependencies":[...] and read here via `_json deps <path>`). Walk to a fixed
+# point: any pass that finds not-yet-selected deps decides once (via
+# --yes-deps/--no-deps/prompt/fail) whether to add them, then re-scans
+# (including newly-added rows) so transitive deps are picked up too, until a
+# pass finds nothing new.
+resolve_dependencies() {
+  local changed=1 category name src_rel dest_rel dep dep_category dep_name template reply decision
+  local candidates_file="$WORK/dep_candidates.txt"
+  local resolvable_file="$WORK/dep_resolvable.tsv"
+
+  while [[ $changed -eq 1 ]]; do
+    changed=0
+
+    # Pass 1: every dep of every currently-selected row, minus ones already
+    # selected (matched on the src_rel/path column) and minus dupes within
+    # this pass.
+    : > "$candidates_file"
+    while IFS=$'\t' read -r category name src_rel dest_rel; do
+      while IFS= read -r dep; do
+        [[ -z "$dep" ]] && continue
+        grep -qF $'\t'"$dep"$'\t' "$SELECTION_FILE" && continue
+        grep -qxF "$dep" "$candidates_file" && continue
+        printf '%s\n' "$dep" >> "$candidates_file"
+      done < <(_json deps "$src_rel")
+    done < "$SELECTION_FILE"
+    [[ -s "$candidates_file" ]] || break
+
+    # Pass 2: resolve each candidate's category + harness mapping. A category
+    # with no mapping for this harness is warn-and-skip, same as
+    # select_assets() does for a whole requested category — never a hard
+    # failure by itself.
+    : > "$resolvable_file"
+    while IFS= read -r dep; do
+      case "$dep" in
+        skills/*) dep_category=skills ;;
+        suites/*) dep_category=suites ;;
+        *) _warn "dependency '$dep' has an unrecognized category — skipped"; continue ;;
+      esac
+      if ! template=$(_json mapping "$HARNESS" "$dep_category"); then
+        _warn "dependency '$dep' has no mapping for harness '$HARNESS' — skipped"
+        continue
+      fi
+      dep_name="${dep##*/}"
+      dest_rel="${template//"{name}"/$dep_name}"
+      printf '%s\t%s\t%s\t%s\n' "$dep_category" "$dep_name" "$dep" "$dest_rel" >> "$resolvable_file"
+    done < "$candidates_file"
+    [[ -s "$resolvable_file" ]] || break
+
+    # Decide once per pass for the whole batch of resolvable candidates.
+    if [[ $NO_DEPS -eq 1 ]]; then
+      decision=skip
+    elif [[ $YES_DEPS -eq 1 ]]; then
+      decision=add
+    elif [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
+      _head "dependencies"
+      printf '  not yet selected:\n'
+      cut -f3 "$resolvable_file" | sed 's/^/    /'
+      printf 'Add them? [Y/n] '
+      read -r reply
+      case "$reply" in
+        ""|[Yy]*) decision=add ;;
+        *)        decision=skip ;;
+      esac
+    else
+      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      exit 1
+    fi
+
+    if [[ "$decision" == skip ]]; then
+      _warn "skipping dependencies (--no-deps): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      break
+    fi
+
+    while IFS=$'\t' read -r category name dep dest_rel; do
+      printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$dep" "$dest_rel" >> "$SELECTION_FILE"
+      changed=1
+    done < "$resolvable_file"
   done
 }
 
@@ -327,10 +493,12 @@ apply_selection() {
     dest="$dest_root/$dest_rel"
 
     if [[ $DRY_RUN -eq 1 ]]; then
+      local note=""
+      is_copilot_suite_category "$category" && note="  (copilot-translated)"
       if [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
-        printf '  [dry-run] %-9s %s -> %s\n' "$category" "$src_rel" "$dest"
+        printf '  [dry-run] %-9s %s -> %s%s\n' "$category" "$src_rel" "$dest" "$note"
       fi
       continue
     fi
@@ -344,6 +512,9 @@ apply_selection() {
     mkdir -p "$(dirname "$dest")"
     rm -rf "$dest"
     cp -R "$src" "$dest"
+    if is_copilot_suite_category "$category"; then
+      translate_to_copilot "$dest"
+    fi
     _ok "$dest_rel"
   done < "$SELECTION_FILE"
 }
@@ -359,6 +530,7 @@ main() {
   validate_harness_and_scope
   resolve_categories
   select_assets
+  resolve_dependencies
   apply_selection
 }
 

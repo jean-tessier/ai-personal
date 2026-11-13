@@ -15,6 +15,20 @@ has_file() { [[ -f "$1" ]] && echo "true" || echo "false"; }
 has_dir()  { [[ -d "$1" ]] && echo "true" || echo "false"; }
 quote()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# Splice an item's optional dependencies.json verbatim, else "[]".
+# A present-but-invalid manifest (malformed JSON) fails the catalog build
+# cleanly instead of corrupting the generated JSON for every consumer.
+read_dependencies_json() {
+  local dir="$1" file="$dir/dependencies.json"
+  [[ -s "$file" ]] || { printf '[]'; return; }
+  if command -v python3 &>/dev/null; then
+    python3 -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+  elif command -v jq &>/dev/null; then
+    jq . "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+  fi
+  cat "$file"
+}
+
 # Extract first non-empty value of a YAML frontmatter key
 yaml_val() {
   local file="$1" key="$2"
@@ -25,6 +39,15 @@ yaml_val() {
     | sed "s/['\"]//g"
 }
 
+# A suite is "plugin-shaped" when it carries a .claude-plugin/plugin.json at its own
+# root (not in a harness-variant subdir — see suites/tier-layered-teams's claude-code/
+# and copilot/ split, which is out of scope for this flag). Drives install.sh's
+# Copilot-translation eligibility; dependencies are read from the colocated
+# dependencies.json instead (see read_dependencies_json / ADR-0009).
+plugin_manifest() { printf '%s' "$1/.claude-plugin/plugin.json"; }
+
+is_plugin_shaped() { has_file "$(plugin_manifest "$1")"; }
+
 # ── Skills ────────────────────────────────────────────────────────────────────
 skills_json=""
 while IFS= read -r -d '' dir; do
@@ -32,9 +55,11 @@ while IFS= read -r -d '' dir; do
   [[ "$name" == _* ]] && continue
   desc=""
   [[ -f "$dir/SKILL.md" ]] && desc="$(yaml_val "$dir/SKILL.md" description)"
-  entry="$(printf '{"name":"%s","path":"skills/%s","description":"%s","hasChangelog":%s,"hasExamples":%s}' \
+  deps="$(read_dependencies_json "$dir")" || exit 1
+  entry="$(printf '{"name":"%s","path":"skills/%s","description":"%s","hasChangelog":%s,"hasExamples":%s,"dependencies":%s}' \
     "$(quote "$name")" "$(quote "$name")" "$(quote "$desc")" \
-    "$(has_file "$dir/CHANGELOG.md")" "$(has_dir "$dir/examples")")"
+    "$(has_file "$dir/CHANGELOG.md")" "$(has_dir "$dir/examples")" \
+    "$deps")"
   skills_json="${skills_json:+$skills_json,}$entry"
 done < <(find "$REPO/skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
@@ -48,8 +73,10 @@ while IFS= read -r -d '' dir; do
     rel="${f#"$dir"/}"
     files_json="${files_json:+$files_json,}\"$(quote "$rel")\""
   done < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null | sort -z)
-  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s]}' \
-    "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json")"
+  deps="$(read_dependencies_json "$dir")" || exit 1
+  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s],"pluginShaped":%s,"dependencies":%s}' \
+    "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json" \
+    "$(is_plugin_shaped "$dir")" "$deps")"
   suites_json="${suites_json:+$suites_json,}$entry"
 done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 

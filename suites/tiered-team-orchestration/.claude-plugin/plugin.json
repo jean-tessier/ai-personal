@@ -1,0 +1,5 @@
+{
+  "name": "tiered-team-orchestration",
+  "version": "1.0.0",
+  "description": "A three-tier model-cost hierarchy — an Opus-tier core orchestrator plans and routes, Sonnet-tier research/coding/review team leads decompose and synthesize, Haiku-tier workers execute narrow tasks."
+}

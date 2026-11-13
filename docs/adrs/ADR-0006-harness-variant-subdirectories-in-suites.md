@@ -2,14 +2,22 @@
 date: 2026-07-09
 decision_date: 2026-07-09
 description: Multi-harness suites get per-harness subdirs named by harnesses.json keys; shared canonical docs stay at the suite root
-status: accepted
+status: superseded
+superseded_by: ADR-0007
 ---
 
 # ADR-0006: Harness-Variant Subdirectories Within a Suite
 
 ## Status
 
-Accepted
+Superseded (2026-07-13) — `copilot`'s `harnesses.json` mapping now has a `suites` key
+(see [ADR-0007](ADR-0007-suites-as-native-plugins.md)), which this ADR's Context and
+Decision sections state does not exist. The structural decision itself — harness-variant
+subdirectories named by `harnesses.json` keys, shared canonical docs at the suite root,
+provenance headers on mirrored sections — is untouched and still in effect; only the
+copilot-mapping premise below is outdated. `suites/tier-layered-teams/copilot/` remains a
+manual `cp -R` payload either way, now because it isn't plugin-shaped rather than because
+no mapping exists for `copilot` at all.
 
 ## Context
 

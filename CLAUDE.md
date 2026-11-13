@@ -14,13 +14,15 @@ handful of Bash scripts that catalog and validate the tree.
 
 ```bash
 bash scripts/validate.sh          # structural lint; exits 1 on failures. Run before committing.
-make check                        # validate.sh + node tests + typecheck (Makefile wraps them — the single deterministic gate)
+make check                        # validate.sh + node tests (scripts/, evals/) + typecheck (Makefile wraps them — the single deterministic gate)
 bash scripts/catalog.sh           # emit a JSON index of every named asset to stdout
 bash scripts/catalog.sh > catalog.json
 bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed via mktemp (no disk clutter)
 bash scripts/test-install-docker.sh   # same tests, fully isolated in a container (needs Docker running)
 node --test scripts/*.test.ts     # unit tests for the dev-only Node tooling in scripts/
 npx tsc --noEmit                  # typecheck the Node tooling
+bash evals/plan-dag/run.sh <smoke|pilot|behaviour|trigger>   # dev-only skill evals; COSTS REAL MONEY per run, read evals/README.md first
+node --test evals/plan-dag/report.test.mjs                   # unit tests for the eval report script (free)
 npm run ingest-asset -- <path-to-source-file> [--dry-run]   # classify + scaffold a new skill or suite component
 ```
 
@@ -59,6 +61,18 @@ distributable skill packs, eval cases, etc.) gets real content again, add it bac
 `scripts/catalog.sh`, `scripts/validate.sh`, `scripts/harnesses.json`, and `install.sh`'s
 `ALL_CATEGORIES` array and `categories` mode together; don't let one drift ahead of the others.
 
+`evals/` (skill evals run through `claude plugin eval`) is dev-only tooling, not an asset category:
+it is never installed and stays out of `install.sh`, `scripts/catalog.sh`, `scripts/validate.sh`
+and `scripts/harnesses.json`. This is the one exception to the "eval cases" note above — see
+`docs/adrs/ADR-0010-evals-are-dev-only-tooling.md`.
+
+**A suite may additionally carry a root `.claude-plugin/plugin.json`**, making it a real
+Claude Code/Copilot plugin — `scripts/catalog.sh` surfaces this per suite as `pluginShaped`
+and `dependencies`. This is optional, not a third kind of asset: a suite without one is
+still a normal suite, just not eligible for `install.sh`'s dependency auto-include or its
+Copilot translation. See `docs/adrs/ADR-0007-suites-as-native-plugins.md` for which suites
+have one and why (it's only added where the suite's shape already fits — never force-fit).
+
 **Naming rule that matters across the whole repo**: a directory's kebab-case name is its canonical
 identifier everywhere — in `README.md`, in any suite that references it, and in its own
 `CHANGELOG.md`.
@@ -80,10 +94,20 @@ harness's name — adding a harness is a JSON edit, not a code change (see
 `docs/adrs/ADR-0003-data-driven-harness-manifest.md`).
 
 **Compatibility is expressed by omission, not error**: a harness's `mapping` only lists categories
-that survive an unmodified copy. A missing key means "structurally incompatible for this harness" —
-`install.sh` skips it with a one-line notice, never a failure. `copilot`'s mapping, for example, has
-no `suites` key — this repo's `suites/{name}/` shape doesn't map cleanly onto Copilot's native
-layout. Don't assume every harness gets every category.
+that survive an unmodified copy (or, for `copilot`'s `suites`, translation — see below). A missing
+key means "structurally incompatible for this harness" — `install.sh` skips it with a one-line
+notice, never a failure. Don't assume every harness gets every category.
+
+**Plugin-shaped suites get translated for Copilot; drop-in payloads don't.** `copilot`'s `suites`
+mapping only reaches suites `scripts/catalog.sh` marks `pluginShaped` (a root
+`.claude-plugin/plugin.json` — see the asset taxonomy section above and
+`docs/adrs/ADR-0007-suites-as-native-plugins.md`); `install.sh`'s `select_assets()` filters the
+rest out per-item with a one-line notice, same compatibility-by-omission spirit applied at item
+instead of category granularity. Eligible suites are mechanically rewritten by
+`translate_to_copilot()` (`agents/*.md` → `agents/*.agent.md`, `.claude-plugin/plugin.json` →
+a root `plugin.json`). Drop-in Copilot payloads (`suites/tiered-escalation-suite/`,
+`suites/tier-layered-teams/copilot/`) aren't plugin-shaped and stay permanently unreachable
+through this path — they're deployed by hand instead (see each suite's own `USAGE.md`).
 
 ### This repo's own dogfood skill install
 
