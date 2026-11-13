@@ -14,7 +14,7 @@ handful of Bash scripts that catalog and validate the tree.
 
 ```bash
 bash scripts/validate.sh          # structural lint; exits 1 on failures. Run before committing.
-make check                        # validate.sh + node tests + typecheck (Makefile wraps them — the single deterministic gate)
+make check                        # validate.sh + node tests (scripts/, evals/) + typecheck (Makefile wraps them — the single deterministic gate)
 bash scripts/catalog.sh           # emit a JSON index of every named asset to stdout
 bash scripts/catalog.sh > catalog.json
 bash scripts/test-install.sh          # install.sh behavioral tests, sandboxed via mktemp (no disk clutter)
