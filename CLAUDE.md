@@ -61,7 +61,8 @@ distributable skill packs, eval cases, etc.) gets real content again, add it bac
 `scripts/catalog.sh`, `scripts/validate.sh`, `scripts/harnesses.json`, and `install.sh`'s
 `ALL_CATEGORIES` array and `categories` mode together; don't let one drift ahead of the others.
 
-`evals/` (skill evals run through `claude plugin eval`) is dev-only tooling, not an asset category:
+`evals/` (skill evals run through `claude plugin eval`, or a headless `claude -p` driver where that
+can't run the skill) is dev-only tooling, not an asset category:
 it is never installed and stays out of `install.sh`, `scripts/catalog.sh`, `scripts/validate.sh`
 and `scripts/harnesses.json`. This is the one exception to the "eval cases" note above — see
 `docs/adrs/ADR-0010-evals-are-dev-only-tooling.md`.
