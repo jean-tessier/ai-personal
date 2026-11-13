@@ -53,7 +53,7 @@ if want_arm C; then
 const s = require("fs").readFileSync(process.argv[1], "utf8");
 const m = /^([^\n]*)\n$/.exec(s);
 const l = m && m[1];
-if (!l || l.length < 1 || l.length > 1536 || !/^[A-Za-z0-9]/.test(l) || l.includes(": ") || l.includes(" #") || l.includes("\t") || l.endsWith(":")) process.exit(1);
+if (!l || l.length < 1 || l.length > 1024 || !/^[A-Za-z0-9]/.test(l) || l.includes(": ") || l.includes(" #") || l.includes("\t") || l.endsWith(":")) process.exit(1);
 ' "$CDESC" 2>/dev/null || die "arms/C.description.txt is not a single valid YAML-plain line"
 fi
 

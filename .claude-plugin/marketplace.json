@@ -34,7 +34,7 @@
       "name": "plan-dag",
       "source": "./skills/plan-dag",
       "category": "skill",
-      "description": "Plan multi-part work as a dependency graph of small slices with cost-appropriate models, then dispatch builder subagents wave by wave"
+      "description": "Plan multi-part work as a DAG of small slices with cost-appropriate models, then dispatch builders wave by wave"
     },
     {
       "name": "readme-maintenance",
