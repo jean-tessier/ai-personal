@@ -68,6 +68,8 @@ reviewer with the round-1 brief plus the round-N brief, and paste in the previou
 
 1. **Check the tiers.** Retag a finding when its tag doesn't fit the definitions in the reviewer brief: for example,
    a "mechanical" fix that spans three files or needs a new test becomes complex. Note each retag for the report.
+   A fix that offers alternatives ("either X or Y") isn't concrete yet: send it back to the reviewer to pick one
+   (step 2) instead of retagging it.
 2. **Decide what gets fixed.** Blocking and should-fix findings always get fixed. Nits are fixed only when they are
    mechanical, because that's cheap; complex nits are listed in the report and left alone. `decision` findings go to
    the user (step 3.5), not to a fixer.
