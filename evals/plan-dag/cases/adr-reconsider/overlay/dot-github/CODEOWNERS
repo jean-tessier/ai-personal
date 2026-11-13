@@ -1,0 +1,4 @@
+# Default owners
+*               @acme/tasks-core
+# Billing moved to the payments team in October 2026
+src/billing/    @acme/payments

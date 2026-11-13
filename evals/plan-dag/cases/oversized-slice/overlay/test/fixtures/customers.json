@@ -1,0 +1,4 @@
+[
+  { "name": "Acme Customer", "email": "customer1@acme.example", "plan": "pro" },
+  { "name": "Globex Customer", "email": "customer2@globex.example", "plan": "free" }
+]

@@ -21,12 +21,18 @@ directory.
 ```yaml
 ---
 name: {skill-name}
-description: One sentence — when to use this skill and what it produces.
+description: What the skill does, the phrases that should trigger it, and what it is not for.
 ---
 ```
 
-The `description` field is consumed by `scripts/catalog.sh` and surfaced
-in the catalog. Keep it under 120 characters.
+The `description` is the trigger text Claude reads to decide when to load the skill. Aim for
+about 500 characters and never exceed 1024 (the Agent Skills limit), because longer text is cut off in the skill listing.
+Lead with what the skill does and the phrases that should trigger it, and say what it is not for.
+Keep it on one line: `scripts/catalog.sh` reads only the first line of the field into the
+catalog.
+
+The 120-character limit applies only to the short text used in the skills table below and in
+`.claude-plugin/marketplace.json`, not to the frontmatter `description`.
 
 ## Available skills
 
@@ -36,5 +42,6 @@ in the catalog. Keep it under 120 characters.
 | [create-adr](create-adr/SKILL.md) | Create a new Architecture Decision Record (ADR) in docs/adrs/ |
 | [create-changelog](create-changelog/SKILL.md) | Create or append a dated entry to a skill's CHANGELOG.md |
 | [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
+| [plan-dag](plan-dag/SKILL.md) | Plan multi-part work as a DAG of small slices with cost-appropriate models, then dispatch builders wave by wave |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter on documentation files |

@@ -234,11 +234,11 @@ async function generateSkill(sourceContent: string, name: string, model: string)
   const systemPrompt = `You are generating a new skill for the "ai-personal" Claude Code asset repo, to be written at skills/${name}/.
 
 Repo conventions (follow exactly):
-- SKILL.md frontmatter is exactly two fields: name, description. description must be a single line, under 120 characters, no colon, no wrapping quotes.
+- SKILL.md frontmatter is exactly two fields: name, description. description is trigger text: what the skill does, the phrases that should trigger it, and what it is not for. Aim for about 500 characters, never exceed 1024, single line, no colon, no wrapping quotes.
 - skill_md_body is everything AFTER the frontmatter block — do NOT include the "---\nname: ...\n---" lines yourself, the caller assembles those separately. Start skill_md_body directly with "# Title" then "## Purpose".
 - skill_md_body follows the real example below: a "# Title" heading, "## Purpose" section, a "## When to invoke" section (trigger phrases + a usage line showing the slash-command form and its arguments), then "## Steps" (a numbered procedure).
 - usage_md gives invocation guidance (trigger phrases) and one worked example, distinct from SKILL.md's procedure.
-- top_level_summary is ONE sentence (not multiple), comparable in length to description, reused verbatim in two workspace index tables — it must read naturally as a single table cell, not a paragraph.
+- top_level_summary is ONE sentence (not multiple), at most 120 characters, reused verbatim in two workspace index tables — it must read naturally as a single table cell, not a paragraph.
 - harness is "vendor-agnostic" unless this skill can ONLY operate on the ai-personal repo's own structure (e.g. it shells out to this repo's own scripts/validate.sh or edits this repo's own docs/adrs/ index) — that is rare. Default to "vendor-agnostic" for anything that would work the same in any project (like the real example below, which still gets "this repo" only because it hardcodes scripts/validate.sh).
 - Do not generate a CHANGELOG.md — the caller creates it with a header only, per convention (new skills start with an empty log, never a fabricated entry).
 
@@ -323,7 +323,7 @@ async function handleSkill(
     {
       file: path.join(REPO_ROOT, 'skills/README.md'),
       header: '| Skill | Description |',
-      row: `| [${name}](${name}/SKILL.md) | ${generated.description} |`,
+      row: `| [${name}](${name}/SKILL.md) | ${generated.top_level_summary} |`,
     },
     {
       file: path.join(REPO_ROOT, 'skills/USAGE.md'),

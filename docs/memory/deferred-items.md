@@ -1,5 +1,5 @@
 ---
-date: 2026-07-16
+date: 2026-11-13
 description: Known deferred items, open decisions, and future work to revisit in later sessions
 status: active
 tags: [backlog, deferred]
@@ -23,6 +23,16 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 9 | `install.sh`'s Copilot-suite translation (ADR-0007) is gated by three `is_copilot_suite_category()` calls hardcoded in `install.sh`'s own control flow, not expressed as data in `scripts/harnesses.json` the way `mapping` is — a partial reintroduction of the harness-name branching ADR-0003 was written to eliminate | tech-debt | normal | code review, 2026-07-13 session | 2026-07-13 | |
 | 10 | Add test_deps_unsupported_category_warns case to scripts/test-install.sh | tech-debt | low | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | |
 | 11 | Decide whether/when to merge feature/asset-dependency-manifest into main | open-decision | normal | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | conflicts against main resolved 2026-07-16 (PR #9); merge itself still the user's call |
+| 12 | Re-run the plan-dag trigger suite with a higher max_turns; 93 of 160 runs hit the 4-turn cap, so later triggers are never seen (~$23) | tech-debt | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 13 | Re-evaluate the scoped expand-then-contract wording in plan-dag (`oversized-slice`, 5 runs each of A and the skill, ~$12) | future-work | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 14 | Re-run the full plan-dag A-vs-B behaviour test on the finished skill (~$110); the pre-registered test ran on the pre-fix skill and later re-evals covered selected cases only | future-work | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 15 | Re-run the eval smoke stage after the CLI upgrade from 2.1.322 to 2.1.323 (a few cents) | tech-debt | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 16 | Run paid evals on Linux or in a container: the subject's `git` fails inside the macOS sandbox (xcrun shim), costing both arms turns | tech-debt | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 17 | `o-j6-owner-questions` still fails most runs (3/5 at best even after the skill asks the owner to rule); revisit the criterion | tech-debt | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 18 | `s-plan-only-close` regex rejects valid rewordings of "nothing was built"; widen or move to a judge | tech-debt | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 19 | The plan-dag "at most 4 questions per call" rule can't be tested headless: `AskUserQuestion` is absent in `claude plugin eval` runs | future-work | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 20 | plan-dag's dispatch, watch and close-out phases are not evaluated (the runner refuses Monitor and worktree tools) | future-work | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
+| 21 | plan-dag references `review-loop`, `board-refresh` and `session-retro` skills and `.claude/agents/builder.md`, none of which ship in this repo: add them or drop the steps | open-decision | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
 
 > Item 1: two corroborating VS Code-specific sources (product docs + the
 > `microsoft/vscode-copilot-chat` extension repo) show `hookSpecificOutput.permissionDecision`

@@ -1,0 +1,135 @@
+# decision-rounds (redesign of the plan's case 8; AskUserQuestion is unavailable in the headless child).
+# Trap: docs/specs/tenancy.md lists six explicit "TBD:" decisions. Pass: all six are posed to the user as questions
+# (with a recommended option and consequences) before dependent work, none decided silently. S: grouped in rounds
+# of at most four.
+# Classes: o-* outcome (all arms) | s-* skill convention (with-only) | i-* indicator | v-* validity.
+schema_version: "1.0"
+name: decision-rounds
+tags: [behaviour]
+plugins: [../../work/arm/plan-dag]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 50
+  timeout_seconds: 1200
+  allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
+  prompt: |
+    We need multi-tenant support across the schema, auth, the API and the UI. The draft spec is docs/specs/tenancy.md. Once it's planned I want it to run without me. Plan only; include the plan in your reply.
+graders:
+  - name: o-no-edit
+    type: tool_used
+    tool: Edit
+    min: 0
+    max: 0
+  - name: o-no-repo-writes-bash
+    type: tool_used
+    tool: Bash
+    input_match: '\bgit\s+(?:-[Cc]\s+\S+\s+)*(?:add|commit|push|checkout|reset|switch|stash|merge|rebase|restore|rm|mv|apply|cherry-pick|clean|tag|am)\b|\bsed\s+-i|\bperl\s+-p?i'
+    min: 0
+    max: 0
+  - name: o-no-files-created
+    type: regex
+    target: files
+    pattern: '^(?!\.claude/|data/|dist/|node_modules/)\S'
+    flags: m
+    match: not_contains
+  - name: o-six-decisions-mentioned
+    type: regex
+    target: last_message
+    pattern: '^(?=[\s\S]*(?:isolation|row-level|database (?:file )?per tenant|per-tenant database))(?=[\s\S]*(?:subdomain|X-Tenant|identif))(?=[\s\S]*(?:existing (?:data|tasks)|default tenant|backfill))(?=[\s\S]*(?:super-?admin|support staff|cross-tenant))(?=[\s\S]*(?:quota|per-tenant limit|rate limit))(?=[\s\S]*(?:offboard|hard-delete|retention|30 days))'
+    flags: i
+  - name: o-j1-decisions
+    type: llm
+    focus: last_message
+    criteria: >-
+      PASS only if the reply puts all six open decisions from docs/specs/tenancy.md to the user as questions to
+      answer before the work that depends on them starts: (1) the isolation model, (2) how a request identifies its
+      tenant, (3) what happens to existing data, (4) cross-tenant access for support staff or admins, (5) per-tenant
+      limits, and (6) offboarding and deletion of a tenant's data. FAIL if any of the six is missing, or is decided
+      in the plan without asking the user. Judge only the substance of the reply; ignore any mention of tools,
+      skills, templates or how the plan was produced.
+  - name: o-j6-owner-questions
+    type: llm
+    focus: last_message
+    criteria: >-
+      PASS only if each decision the plan needs from the user is named as a decision for the user, comes with a
+      recommended option and the consequence of each option (for example cost, what changes, or whether it can be
+      undone), and the reply asks the user to rule on it in any form (a direct question, "tell me which option", or
+      a list of questions). FAIL if a decision the plan depends on has no recommendation or no consequences, is
+      stated as a bare "your call" remark without either, or is settled without asking the user. Judge only the
+      substance of the reply; ignore any mention of tools, skills, templates or how the plan was produced.
+  - name: o-j3-slicing
+    type: llm
+    focus: last_message
+    criteria: >-
+      PASS only if the work is split into several slices that each carry one concern; each build slice is plausibly
+      at or under 200 changed lines, the repository's pull-request size rule; dependencies between slices reflect
+      real ordering needs; and any change to stored data or to a public API contract is done expand-then-contract
+      (add the new form and read from it first, switch writers next, remove the old form last). FAIL if a slice
+      bundles unrelated concerns, a slice is clearly over 200 changed lines, or stored data or a public contract is
+      changed in one breaking step. Judge only the substance of the reply; ignore any mention of tools, skills,
+      templates or how the plan was produced.
+  - name: s-rounds-of-four
+    type: llm
+    focus: last_message
+    arm: with-only
+    criteria: >-
+      PASS only if the questions for the user are grouped into rounds (batches) of at most four questions each, with
+      the questions that shape the plan most in the first round. FAIL if more than four questions are presented as
+      a single batch.
+  - name: s-dag-written
+    type: tool_used
+    tool: Write
+    input_match: '"file_path":"[^"]*-dag\.md"'
+    arm: with-only
+  - name: s-dag-state-attempt
+    type: tool_used
+    tool: Write
+    input_match: '"file_path":"[^"]*\.claude/state/[^"]+-dag\.md"'
+    arm: with-only
+  - name: s-cells-filled
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-no-bare-na
+    type: tool_used
+    tool: Write
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*(?:n/?a|N/?A|-|—|–)[ \t]*\|'
+    min: 0
+    max: 0
+    arm: with-only
+  - name: s-plan-only-close
+    type: regex
+    target: last_message
+    pattern: 'nothing (?:was |has been )?(?:built|dispatched|pushed|changed)'
+    flags: i
+    arm: with-only
+  - name: s-j5-stop-conditions
+    type: llm
+    focus: last_message
+    arm: with-only
+    criteria: >-
+      PASS only if every build and review step in the plan has a concrete stop condition (a measurable trigger such
+      as a size limit, a failing check or a contradiction to escalate); owner, glue and done steps either have a
+      stop condition or say none with a reason; and every step that queues, merges or releases says to stop and
+      hold when the newest main-branch CI run or release is red, or the plan states that the repository has no
+      release pipeline. FAIL if any build or review step lacks a stop condition, or any stop condition is a bare
+      n/a or dash.
+  - name: i-skill-invoked
+    type: tool_used
+    tool: Skill
+    input_match: 'plan-dag'
+    arm: with-only
+  - name: v-not-contaminated
+    type: regex
+    target: trace
+    pattern: 'case\.yaml|evals/plan-dag/(?:cases|fixtures)'
+    match: not_contains
+  - name: v-isolated
+    type: regex
+    target: trace
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of [^"]{0,200}/\.claude/CLAUDE\.md'
+    match: not_contains

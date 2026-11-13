@@ -31,6 +31,12 @@
       "description": "Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship"
     },
     {
+      "name": "plan-dag",
+      "source": "./skills/plan-dag",
+      "category": "skill",
+      "description": "Plan multi-part work as a DAG of small slices with cost-appropriate models, then dispatch builders wave by wave"
+    },
+    {
       "name": "readme-maintenance",
       "source": "./skills/readme-maintenance",
       "category": "skill",
