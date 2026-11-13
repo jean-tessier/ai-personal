@@ -38,8 +38,10 @@ added to `install.sh`'s `ALL_CATEGORIES`, `scripts/catalog.sh`, `scripts/validat
 
 - Raw results stay local: `evals/*/work/` is gitignored.
 - Dated markdown reports are committed under `evals/<skill>/reports/`, named
-  `<date>-<skill-tree-hash7>` (`<skill-tree-hash7>` is `git rev-parse --short HEAD:skills/<skill>`).
-  A new report supersedes the previous one for that skill.
+  `<date>-<skill-tree-hash7>` (`<skill-tree-hash7>` is `git rev-parse --short HEAD:skills/<skill>`);
+  the smoke/pilot note is named `<date>-smoke-pilot`. A new FULL report supersedes the previous full
+  one for that skill. Partial follow-up reports (re-eval of selected cases, follow-ups) complement
+  it and keep status `active`.
 - Reports record the exact CLI version, because the feature is early access.
 
 Alternatives considered:

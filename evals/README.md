@@ -1,7 +1,7 @@
 # evals
 
-Dev-only evals for skills in this repo, run with `claude plugin eval` (early access; Claude Code CLI 2.1.322 is
-pinned). This is not an asset category: nothing here is installed by `install.sh` or listed by `scripts/catalog.sh`.
+Dev-only evals for skills in this repo, run with `claude plugin eval` (early access; reports record the exact CLI
+version, see Prerequisites). This is not an asset category: nothing here is installed by `install.sh` or listed by `scripts/catalog.sh`.
 The ADR recording this decision is [ADR-0010](../docs/adrs/ADR-0010-evals-are-dev-only-tooling.md).
 
 Today there is one eval set, `evals/plan-dag/`.
@@ -14,7 +14,9 @@ $200, trigger $80. Reports are never published (`--no-publish` is hard-coded in 
 
 ## Prerequisites
 
-- Claude Code CLI 2.1.322 (rerun smoke after any upgrade), logged in.
+- Claude Code CLI, logged in. The full run (2026-11-12) used 2.1.322; the re-eval and the follow-up used 2.1.323
+  after an auto-update. The smoke rerun that should follow a CLI upgrade was not done, so results across the two
+  versions are not strictly comparable.
 - node >= 20, git.
 
 ## Running
@@ -54,6 +56,37 @@ node evals/plan-dag/report.mjs --out evals/plan-dag/reports/<YYYY-MM-DD>-<tree7>
 `tree7` is `git rev-parse --short HEAD:skills/plan-dag`. The report is deterministic and recomputes every score from
 grader results. The A vs B and B vs C verdicts are computed; the Interpretation section is written by hand. Reports
 are committed, raw results are not. Test the script with `node --test evals/plan-dag/report.test.mjs`.
+
+A run whose paid (LLM-judged) graders were skipped by the cost ceiling is left out of O and S scoring and counted
+under Validity, "Paid graders skipped". A new FULL report supersedes the previous full one; partial reports
+(re-eval of selected cases, follow-ups) complement it. The hand-written smoke/pilot note is named
+`<date>-smoke-pilot.md`.
+
+## Decision rules
+
+Fixed before any run; `report.mjs` computes both verdicts with exactly these thresholds.
+
+A vs B, "is the skill body worth it?" (YES only if all four hold):
+
+1. Sign test over the 8 trap cases (every behaviour case except `negative-small-change`; per case, B wins if its
+   mean O-score beats A's): one-sided p <= 0.035.
+2. Pooled O pass rate, B minus A, >= +20 points.
+3. Zero canary leaks in B.
+4. On the negative case, B's O-score is no worse than A's.
+
+Harm flag (reported, not part of the verdict): a case where B's O-pass count is <= A's - 3.
+
+With 8 trap cases and p <= 0.035, a 7-1 result narrowly fails (one-sided p = 36/256 = 0.0352); 8-0 (p = 0.0039) or
+7-0 with one tie (p = 0.0078) passes.
+
+B vs C, "adopt the shorter description C" (all of a, b, c must hold):
+
+- (a) Recall and false-trigger rate, on all 32 prompts and again on the 8 held-out ones: C recall >= B - 5 points and
+  C false-trigger <= B + 5 points.
+- (b) Behaviour non-inferiority: per case, C's O-pass count over its first 3 valid runs >= B's - 1, and zero C
+  canary leaks. Cases where the counts differ by 2 or more are flagged for a 5-run C rerun.
+- (c) On all prompts, at least one rate (recall, or false-trigger) is better for C by >= 10 points, or both are
+  within ±5. A tie goes to the shorter description (C).
 
 ## Layout
 

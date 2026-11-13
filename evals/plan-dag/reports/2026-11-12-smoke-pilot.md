@@ -17,7 +17,7 @@ the frontmatter `description` (505 chars vs 872).
 
 | Check | Result |
 |---|---|
-| Isolation (no global CLAUDE.md, memory or ponytail text, no Agent tool) | Held in all 10 traces |
+| Isolation (no operator CLAUDE.md, memory or hook text, no Agent tool) | Held in all 10 traces |
 | `selftest-good` passes every grader; `selftest-bad` fails exactly its 6 planted defects | Yes |
 | All arms complete | Yes |
 | Cost per behaviour run, judge included | $0.20-0.30 (estimate was $0.70-1.00) |
