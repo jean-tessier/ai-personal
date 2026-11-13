@@ -59,9 +59,10 @@ lines and stay under 400.
 - **Cut vertically** where you can: the smallest thing a person could name, through the layers it needs.
 - **Land it inert, switch it on last.** Every slice but the last does nothing in production; the last one wires it up.
 - **Prepare first:** a refactor that makes the feature easy is its own slice, behaviour-preserving.
-- **Expand, then contract** for stored data or contracts: reader first, writer later, removal last. Recommend it
-  even for a rename; changing data in place (one migration, a temporary view) is a cheaper option for the owner to pick
-  in the decision round, with its risks.
+- **Expand, then contract** for stored data or contracts that have readers outside the one deploy (other services,
+  mobile apps, partners, scheduled jobs): reader first, writer later, removal last. With no such readers, changing it
+  in place (one migration, a temporary view) can be the cheapest plan. Either way, an in-place change goes to the
+  owner in the decision round as a choice, with its risks.
 - **Decisions first:** a slice that depends on an owner decision waits for it.
 - **Stack only real dependencies**, and keep a stack to about five layers.
 - **Tests for behaviour that already works** can't fail first. Their acceptance check is a sabotage check instead:
