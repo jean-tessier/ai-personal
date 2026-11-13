@@ -52,10 +52,10 @@ test("errored and contaminated runs are excluded and counted", () => {
 });
 
 test("skipped graders are excluded from denominators", () => {
-  const i = input(meta("r1", "behaviour", "B"), [kase("c1", [run([g("o-a", true), g("o-b", false, "skipped: cost ceiling")])], [])]);
+  const i = input(meta("r1", "behaviour", "B"), [kase("c1", [run([g("o-a", true), g("i-b", false, "skipped: cost ceiling")])], [])]);
   const md = buildReport([i]);
   assert.match(md, /\| c1 \| o-a \| O \| not run \| 1\/1 \|/);
-  assert.match(md, /\| c1 \| o-b \| O \| not run \| not run \|/);
+  assert.match(md, /\| c1 \| i-b \| I \| not run \| not run \|/);
   assert.match(md, /\| behaviour \| B \| 0 \| 0 \| 0 \| 0 \| 1 \| 0 \|/);
 });
 
@@ -142,4 +142,25 @@ test("negative case invocation is read from i-skill-not-invoked and left out of 
   const md = buildReport([b]);
   assert.match(md, /\| negative-small-change \|[^\n]*\| 1\/1 \| not run \|\n/);
   assert.match(md, /Skill invoked \(trap cases\): B not run, C not run/);
+});
+
+test("a run with skipped paid graders is left out of O and S scoring and counted under Validity", () => {
+  const full = (ok) => [g("o-x", ok), g("o-canary-reply", true), g("i-skill-invoked", true), g("s-dag-written", true), g("s-y", ok)];
+  const skipped = [g("o-x", false, "skipped: cost ceiling"), g("o-canary-reply", true), g("i-skill-invoked", true), g("s-dag-written", true), g("s-y", false, "skipped: cost ceiling")];
+  const i = input(meta("r1", "behaviour", "B"), [kase("c1", [run(full(true)), run(skipped, { skippedPaidGraders: true })], [])]);
+  const md = buildReport([i]);
+  assert.match(md, /\| c1 \| not run \| 1\/1 \| not run \|/); // per-case B O-pass: n is 1, the skipped run is not a pass
+  assert.match(md, /\| c1 \| o-x \| O \| not run \| 1\/1 \|/); // per-grader cell excludes it
+  assert.match(md, /\| c1 \| s-y \| S \| not run \| 1\/1 \|/);
+  assert.match(md, /\| c1 \| o-canary-reply \| O \| not run \| 2\/2 \|/); // deterministic canary still counts
+  assert.match(md, /\| O \| not run \| 2\/2 \(100%\)/); // o-x and o-canary-reply of the one scored run
+  assert.match(md, /\| S \| not run \| 2\/2 \(100%\)/); // s-dag-written and s-y, one run
+  assert.match(md, /\| behaviour \| B \| 0 \| 0 \| 0 \| 0 \| 2 \| 0 \|/); // two paid graders skipped
+  assert.match(md, /\| c1 \| i-skill-invoked \| I \| not run \| 2\/2 \|/); // indicator still counts every run
+});
+
+test("a run flagged skippedPaidGraders without skipped graders is also left out", () => {
+  const ok = [g("o-x", true)];
+  const i = input(meta("r1", "behaviour", "B"), [kase("c1", [run(ok), run(ok, { skippedPaidGraders: true })], [])]);
+  assert.match(buildReport([i]), /\| c1 \| not run \| 1\/1 \| not run \|/);
 });

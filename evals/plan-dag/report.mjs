@@ -9,7 +9,7 @@ const Z = 1.959964;
 const EPS = 1e-9;
 const NEGATIVE_CASE = "negative-small-change";
 const CANARY = ["o-canary-trace", "o-canary-reply"];
-// Harness expectations (spec 1.5): graders expected to FAIL; everything else must PASS.
+// Harness expectations (see evals/README.md, "Decision rules"): graders expected to FAIL; everything else must PASS.
 const HARNESS_EXPECTED_FAIL = {
   "selftest-bad": [
     "o-no-edit",
@@ -85,7 +85,8 @@ export function loadInput(dir) {
 
 // ---------- per-run processing ----------
 
-const evaluated = (r, prefix) => r.graders.filter((g) => !g.skipped && g.name.startsWith(prefix));
+// A run whose paid (o-/s-) graders were skipped is left out of O and S scoring entirely (r.paidSkipped).
+const evaluated = (r, prefix) => (r.paidSkipped ? [] : r.graders.filter((g) => !g.skipped && g.name.startsWith(prefix)));
 function oScore(r) {
   const g = evaluated(r, "o-");
   return g.length ? g.filter((x) => x.passed).length / g.length : null;
@@ -163,12 +164,13 @@ export function buildReport(inputsIn, triggers = []) {
             if (iso) st.notIsolated++;
             if (bad || iso) continue;
           }
+          const paidSkipped = r.skippedPaidGraders === true || graders.some((g) => g.skipped && /^[os]-/.test(g.name));
           st.skipped += graders.filter((g) => g.skipped).length;
           st.graderErrors += graders.filter((g) => g.threw).length;
           // cell checks pass vacuously when no DAG was written: treat them as not evaluated
           if (meta.suite === "behaviour" && !graders.some((g) => g.name === "s-dag-written" && !g.skipped && g.passed))
             for (const g of graders) if (g.name === "s-cells-filled" || g.name === "s-no-bare-na") g.skipped = true;
-          valid.push({ suite: meta.suite, arm, case: c.name, startedAt: r.startedAt || "", turns: r.turns, cost: r.costUsd || 0, judge: r.judgeCostUsd || 0, graders });
+          valid.push({ suite: meta.suite, arm, case: c.name, startedAt: r.startedAt || "", turns: r.turns, paidSkipped, cost: r.costUsd || 0, judge: r.judgeCostUsd || 0, graders });
         }
       }
     }
@@ -294,7 +296,8 @@ export function buildReport(inputsIn, triggers = []) {
   const tree7 = String(unique(metas.map((m) => m.skillTree))[0] || "unknown").slice(0, 7);
   const description = `plan-dag evals: behaviour A/B/C and triggers B/C, CLI ${ver}, skill ${tree7}`.slice(0, 120);
   const runsCount = (suite, arm) => vr(suite, arm).length;
-  const totalCost = inputs.reduce((s, i) => s + ((i.run && i.run.costUsd) || 0), 0);
+  const subjectCost = inputs.reduce((s, i) => s + ((i.run && i.run.costUsd) || 0), 0);
+  const judgeCost = inputs.reduce((s, i) => s + ((i.run && i.run.cases) || []).reduce((t, c) => t + ["with", "without"].reduce((u, side) => u + (((c.arms || {})[side]) || []).reduce((v, r) => v + (r.judgeCostUsd || 0), 0), 0), 0), 0);
   out.push(
     "---",
     `date: ${date}`,
@@ -313,7 +316,8 @@ export function buildReport(inputsIn, triggers = []) {
     `  behaviourC: ${runsCount("behaviour", "C")}`,
     `  triggerB: ${runsCount("trigger", "B")}`,
     `  triggerC: ${runsCount("trigger", "C")}`,
-    `totalCostUsd: ${totalCost.toFixed(2)}`,
+    `subjectCostUsd: ${subjectCost.toFixed(2)}`,
+    `judgeCostUsd: ${judgeCost.toFixed(2)}`,
     "inputs:",
     ...(metas.length ? metas.map((m) => `  - ${JSON.stringify(m.runId)}`) : ["  []"]),
     "---",
@@ -326,14 +330,14 @@ export function buildReport(inputsIn, triggers = []) {
     "",
     "## Interpretation",
     "",
-    "_To be written by hand (at most 10 lines), applying plan §6 and §8 as written._",
+    "_To be written by hand (at most 10 lines), applying the decision rules in evals/README.md as written._",
     "",
   );
 
   const beh = hasInput("behaviour");
   const cell = (arm, name, grader) => {
     const rs = vr("behaviour", arm).filter((r) => r.case === name);
-    const gs = rs.flatMap((r) => r.graders.filter((g) => g.name === grader && !g.skipped));
+    const gs = rs.flatMap((r) => r.graders.filter((g) => g.name === grader && !g.skipped && !(r.paidSkipped && /^[os]-/.test(g.name) && !CANARY.includes(g.name))));
     return gs.length ? `${gs.filter((g) => g.passed).length}/${gs.length}` : "not run";
   };
   const invoked = (arm, name) => {
@@ -362,7 +366,7 @@ export function buildReport(inputsIn, triggers = []) {
     });
     out.push(table(["Case", "A O-pass", "B O-pass", "C O-pass", "A O-score min/med/max", "B O-score min/med/max", "C O-score min/med/max", "B vs A", "B invoked", "C invoked"], rows));
     const tot = (arm) => caseOrder.filter((n) => n !== NEGATIVE_CASE).reduce((t, n) => { const x = invoked(arm, n); return { k: t.k + x.k, n: t.n + x.n }; }, { k: 0, n: 0 });
-    out.push("", `Skill invoked (trap cases): B ${inv(tot("B"))}, C ${inv(tot("C"))}. S-class rates below count only runs where it was invoked.`);
+    out.push("", `Skill invoked (trap cases): B ${inv(tot("B"))}, C ${inv(tot("C"))}. The pooled S rate counts only runs where it was invoked; per-grader cells count every run in which that grader ran.`);
   }
 
   out.push("", "## Behaviour: graders", "");
