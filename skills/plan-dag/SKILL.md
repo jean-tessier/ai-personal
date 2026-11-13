@@ -157,8 +157,9 @@ If none of these applies, say so and why. One un-arranged write once held an ove
 
 ## When you were asked for a plan only
 
-Stop after Phase 5's questions (written in the reply with the recommendation and consequences, not asked through
-AskUserQuestion unless the user wants that) and Phase 6's list. The final message leads with the premise check and the
+Stop after Phase 5's questions (written in the reply with the recommendation and consequences, in rounds of at most
+four with the most plan-shaping first, not asked through AskUserQuestion unless the user wants that) and Phase 6's
+list. The final message leads with the premise check and the
 decisions needed, then where the DAG file is, then the plan's cost; says plainly that nothing was built, dispatched,
 pushed or changed; and ends by asking the owner to rule on the decisions. A DAG table in the reply keeps every
 column, stop conditions included.
