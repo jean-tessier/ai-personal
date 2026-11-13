@@ -37,12 +37,12 @@ harness (`"suites/{name}"`), too coarse to say "copy only this subtree" or "this
 isn't a rename-copy at all — parts of it are individual role prompts, parts are a payload that
 overlays onto the target repo's own root (`Makefile`, `.vscode/`, an always-on instructions file)."
 Both a `tier-layered-teams` walkthrough and a design discussion converged on a colocated manifest,
-peer to ADR-0007's `dependencies.json`, that declares this per suite without `install.sh` ever
+peer to ADR-0009's `dependencies.json`, that declares this per suite without `install.sh` ever
 branching on a suite's name — preserving ADR-0003's data-driven, compatibility-by-omission design.
 
 ## Decision
 
-**A colocated `manifest.json` per multi-harness suite**, sibling to ADR-0007's `dependencies.json`.
+**A colocated `manifest.json` per multi-harness suite**, sibling to ADR-0009's `dependencies.json`.
 A suite with no `manifest.json` keeps today's flat wholesale-copy behavior unchanged — single-harness
 suites (`handoff-workflow`, `hub-and-spoke-orchestration`, `tiered-team-orchestration`,
 `tiered-escalation-suite`) are unaffected.
@@ -139,7 +139,7 @@ filesystem, the same drift ADR-0006 already fought once with `PROTOCOL.md`'s mir
 - The kind vocabulary (`agents`/`skills`/`instructions`/`config`) is derived from the one existing
   multi-harness suite. A future suite or harness may need a kind this list doesn't cover; growing the
   vocabulary is additive, not breaking, but is a real open edge, not a closed one.
-- Suites now have two optional colocated JSON files (`dependencies.json` from ADR-0007,
+- Suites now have two optional colocated JSON files (`dependencies.json` from ADR-0009,
   `manifest.json` from this ADR) — both small and both "colocated over centralized," but a suite
   author now has two conventions to know about instead of one.
 
@@ -156,7 +156,7 @@ filesystem, the same drift ADR-0006 already fought once with `PROTOCOL.md`'s mir
 - ADR-0006 (`docs/adrs/ADR-0006-harness-variant-subdirectories-in-suites.md`) — harness-variant
   subdirectory convention; the "documented dead weight" and categorical copilot-suites gap this ADR
   addresses.
-- ADR-0007 (`docs/adrs/ADR-0007-colocated-dependency-manifest.md`) — colocated
+- ADR-0009 (`docs/adrs/ADR-0009-colocated-dependency-manifest.md`) — colocated
   `{category}/{name}/dependencies.json`; the sibling per-asset JSON file convention `manifest.json`
   reuses.
 - `scripts/harnesses.json` — gains a `resourceKinds` map per harness (not yet implemented).
