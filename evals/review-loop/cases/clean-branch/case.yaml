@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: clean-branch
+expected_outcome: |
+  feature/coupons adds a correct, tested applyCoupon that follows the README and CONTRIBUTING. The
+  Opus reviewer should be SATISFIED in round 1 (or after at most one small fix round), the behaviour
+  stays correct, and nothing is left uncommitted.
+context:
+  scaffold_script: scaffold.sh

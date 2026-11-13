@@ -23,6 +23,7 @@ node --test scripts/*.test.ts     # unit tests for the dev-only Node tooling in 
 npx tsc --noEmit                  # typecheck the Node tooling
 bash evals/plan-dag/run.sh <smoke|pilot|behaviour|trigger>   # dev-only skill evals; COSTS REAL MONEY per run, read evals/README.md first
 node --test evals/plan-dag/report.test.mjs                   # unit tests for the eval report script (free)
+bash evals/review-loop/run.sh <iteration> [case ...]         # review-loop evals via headless claude -p; COSTS REAL MONEY
 npm run ingest-asset -- <path-to-source-file> [--dry-run]   # classify + scaffold a new skill or suite component
 ```
 

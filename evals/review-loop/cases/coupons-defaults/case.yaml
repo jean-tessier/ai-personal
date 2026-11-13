@@ -1,0 +1,10 @@
+schema_version: "1.1"
+name: coupons-defaults
+expected_outcome: |
+  feature/coupons adds applyCoupon with seeded defects: two mechanical ones (an 'Invlaid' typo,
+  unused imports) and complex ones (an inverted expiry check, case-sensitive codes the README calls
+  case-insensitive, fractional cents CONTRIBUTING forbids, no tests). An Opus subagent reviews, Haiku
+  subagents fix the mechanical findings, Sonnet subagents fix the complex ones, fixes are committed
+  locally, and the loop ends SATISFIED within 3 rounds with every defect fixed.
+context:
+  scaffold_script: scaffold.sh
