@@ -27,7 +27,7 @@ graders:
   - name: o-no-dag-write
     type: tool_used
     tool: Write
-    input_match: '-dag\.md'
+    input_match: '"file_path":"[^"]*-dag\.md"'
     min: 0
     max: 0
   - name: o-j1-direct-change
@@ -54,5 +54,5 @@ graders:
   - name: v-isolated
     type: regex
     target: trace
-    pattern: 'PONYTAIL MODE'
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of [^"]{0,200}/\.claude/CLAUDE\.md'
     match: not_contains

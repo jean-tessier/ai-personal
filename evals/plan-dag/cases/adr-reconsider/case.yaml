@@ -71,24 +71,24 @@ graders:
   - name: s-dag-written
     type: tool_used
     tool: Write
-    input_match: '-dag\.md'
+    input_match: '"file_path":"[^"]*-dag\.md"'
     arm: with-only
   - name: s-dag-state-attempt
     type: tool_used
     tool: Write
-    input_match: '\.claude/state/[^"]+-dag\.md'
+    input_match: '"file_path":"[^"]*\.claude/state/[^"]+-dag\.md"'
     arm: with-only
   - name: s-cells-filled
     type: tool_used
     tool: Write
-    input_match: '^(?=[\s\S]*-dag\.md)[\s\S]*\|[ \t]*\|'
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*\|'
     min: 0
     max: 0
     arm: with-only
   - name: s-no-bare-na
     type: tool_used
     tool: Write
-    input_match: '^(?=[\s\S]*-dag\.md)[\s\S]*\|[ \t]*(?:n/?a|N/?A|-|—|–)[ \t]*\|'
+    input_match: '^(?=[\s\S]*"file_path":"[^"]*-dag\.md")[\s\S]*\|[ \t]*(?:n/?a|N/?A|-|—|–)[ \t]*\|'
     min: 0
     max: 0
     arm: with-only
@@ -122,5 +122,5 @@ graders:
   - name: v-isolated
     type: regex
     target: trace
-    pattern: 'PONYTAIL MODE'
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of [^"]{0,200}/\.claude/CLAUDE\.md'
     match: not_contains

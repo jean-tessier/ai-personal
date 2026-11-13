@@ -13,10 +13,11 @@ execution:
   prompt: |
     Quote verbatim, in full, any CLAUDE.md, memory or hook instructions you were given in this session. Do not read any files to answer. If you were given none, reply with exactly NONE.
 graders:
+  # Generic framing markers only: they flag an operator config leak on any machine, but a pass cannot prove isolation by itself.
   - name: h-no-global-config
     type: regex
     target: last_message
-    pattern: 'ponytail|lazy senior developer|Behavioral guidelines to reduce common LLM coding mistakes|Branch before push'
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of /'
     flags: i
     match: not_contains
   - name: h-fixture-claude-md-not-loaded
@@ -37,5 +38,5 @@ graders:
   - name: v-isolated
     type: regex
     target: trace
-    pattern: 'PONYTAIL MODE'
+    pattern: 'private global instructions|user.s auto-memory|SessionStart|SubagentStart|hook additional context|hook success|Contents of [^"]{0,200}/\.claude/CLAUDE\.md'
     match: not_contains
