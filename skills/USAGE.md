@@ -55,4 +55,5 @@ structure and docs honest.
 | [fix-validation](fix-validation/SKILL.md) | Run `scripts/validate.sh`, auto-fix mechanical issues, and report what still needs manual authorship. | [USAGE.md](fix-validation/USAGE.md) |
 | [plan-dag](plan-dag/SKILL.md) | Plan multi-part work as a DAG of small slices with cost-appropriate models, then dispatch builders wave by wave. | [USAGE.md](plan-dag/USAGE.md) |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and fix every README in the repo against a shared quality rubric, one subagent per workspace. | [USAGE.md](readme-maintenance/USAGE.md) |
+| [review-loop](review-loop/SKILL.md) | Loop a PR or branch through an Opus reviewer and Haiku/Sonnet fixers until the reviewer is SATISFIED. | [USAGE.md](review-loop/USAGE.md) |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter blocks on `docs/` files against a spec. | [USAGE.md](yaml-frontmatter/USAGE.md) |

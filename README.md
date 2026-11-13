@@ -24,6 +24,7 @@ be dropped into any project, professional or otherwise.
 | [fix-validation](skills/fix-validation/SKILL.md) | Runs `scripts/validate.sh`, auto-fixes mechanical structural issues, reports what needs manual authorship | this repo |
 | [plan-dag](skills/plan-dag/SKILL.md) | Plans multi-part work as a DAG of small slices with cost-appropriate models, then dispatches builders wave by wave | vendor-agnostic |
 | [readme-maintenance](skills/readme-maintenance/SKILL.md) | Audits and refreshes every README in a repo against a quality rubric | vendor-agnostic |
+| [review-loop](skills/review-loop/SKILL.md) | Loops a PR or branch through an Opus reviewer and Haiku/Sonnet fixers until the reviewer is satisfied, with per-request model overrides | Claude Code |
 | [yaml-frontmatter](skills/yaml-frontmatter/SKILL.md) | Validates, adds, or updates YAML frontmatter on documentation files | vendor-agnostic |
 
 ## Suites

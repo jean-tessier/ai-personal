@@ -44,4 +44,5 @@ The 120-character limit applies only to the short text used in the skills table 
 | [fix-validation](fix-validation/SKILL.md) | Run scripts/validate.sh, auto-fix mechanical structural issues, and report what needs manual authorship |
 | [plan-dag](plan-dag/SKILL.md) | Plan multi-part work as a DAG of small slices with cost-appropriate models, then dispatch builders wave by wave |
 | [readme-maintenance](readme-maintenance/SKILL.md) | Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace |
+| [review-loop](review-loop/SKILL.md) | Loop a PR through an Opus reviewer and Haiku/Sonnet fixers until the reviewer is SATISFIED |
 | [yaml-frontmatter](yaml-frontmatter/SKILL.md) | Validate, add, or update YAML frontmatter on documentation files |

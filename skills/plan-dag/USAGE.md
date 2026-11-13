@@ -28,5 +28,5 @@ built, pushed, or dispatched.
 ## Related skills
 
 `SKILL.md` hands off to `review-loop`, `board-refresh`, and `session-retro`, and prefers a
-repo's `.claude/agents/builder.md`. None of those ship in this repo; install them from
-elsewhere or skip those steps.
+repo's `.claude/agents/builder.md`. Only [`review-loop`](../review-loop/SKILL.md) ships in
+this repo; install the others from elsewhere or skip those steps.

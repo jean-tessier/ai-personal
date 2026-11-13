@@ -43,6 +43,12 @@
       "description": "Audit and refresh every README in the repo against a quality rubric, one reviewer subagent per workspace"
     },
     {
+      "name": "review-loop",
+      "source": "./skills/review-loop",
+      "category": "skill",
+      "description": "Loop a PR through an Opus reviewer and Haiku/Sonnet fixers until the reviewer is SATISFIED"
+    },
+    {
       "name": "yaml-frontmatter",
       "source": "./skills/yaml-frontmatter",
       "category": "skill",
