@@ -6,8 +6,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const HERE = path.dirname(new URL(import.meta.url).pathname);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 const [armDir, repo] = process.argv.slice(2);
 if (!armDir) { console.error('usage: grade.mjs <arm-dir> [repo-dir]'); process.exit(64); }
 // armDir is <case>/<arm> or, with repeats, <case>/<arm>/run-<i>
