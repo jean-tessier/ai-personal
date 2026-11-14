@@ -20,12 +20,13 @@ TOOLS=(Agent SendMessage ToolSearch Skill Read Edit Write Glob Grep TodoWrite
        "Bash(wc:*)" "Bash(head:*)" "Bash(tail:*)" "Bash(diff:*)")
 
 one() { # case arm [run]
-  local c="$1" arm="$2" dir="$OUT/$1/$2${3:+/run-$3}" run body prompt
+  local c="$1" arm="$2" dir="$OUT/$1/$2${3:+/run-$3}" run body prompt turns
   rm -rf "$dir" && mkdir -p "$dir"
   run="$(mktemp -d "${TMPDIR:-/tmp}/review-loop-eval.XXXXXX")" && echo "$run/repo" > "$dir/run-dir.txt"
   mkdir "$run/repo" && (cd "$run/repo" && bash "$HERE/cases/$c/scaffold.sh" && echo ".claude/" >> .git/info/exclude)
   git -C "$run/repo" rev-parse HEAD > "$dir/scaffold-head.txt"
   body="$(awk 'n>=2{print} /^---$/{n++}' "$HERE/cases/$c/prompt.md" | sed '/./,$!d')"
+  turns="$(awk '/^---$/{n++; next} n==1 && /^max_turns:/{print $2; exit}' "$HERE/cases/$c/prompt.md")"
   if [ "$arm" = with_skill ]; then
     mkdir -p "$run/repo/.claude/skills" && cp -R "$REPO/skills/review-loop" "$run/repo/.claude/skills/"
     prompt="$body"
@@ -36,7 +37,7 @@ one() { # case arm [run]
   local start; start="$(date +%s)"
   (cd "$run/repo" && claude -p "$prompt" --model claude-opus-5-5 --setting-sources project,local \
      --allowedTools "${TOOLS[@]}" --disallowedTools WebFetch WebSearch \
-     --output-format stream-json --verbose --max-budget-usd "$BUDGET" \
+     --output-format stream-json --verbose --max-budget-usd "$BUDGET" ${turns:+--max-turns $turns} \
      > "$dir/transcript.jsonl" 2> "$dir/stderr.txt") || echo "run.sh: $c/$arm exited non-zero" >&2
   echo "$start $(date +%s)" > "$dir/wall.txt"
   node "$HERE/grade.mjs" "$dir" "$run/repo"
