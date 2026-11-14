@@ -20,8 +20,8 @@ const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf8', .
 
 function role(desc = '', prompt = '') {
   const d = desc.toLowerCase(), p = prompt.slice(0, 600).toLowerCase();
-  if (/\bfix/.test(d) || /you are fixing/.test(p)) return 'fixer';
-  if (/review/.test(d) || /you are reviewing|code review|review (the|this)/.test(p)) return 'reviewer';
+  if (/you are (reviewing|(a|the) code reviewer)/.test(p) || (/review/.test(d) && !/\bfix/.test(d))) return 'reviewer';
+  if (/\bfix|\b(apply|create|write|add|edit)\b/.test(d + ' ' + p)) return 'fixer';
   return 'other';
 }
 
@@ -37,8 +37,8 @@ function collect() {
         const { description = '', prompt = '', model = 'inherit', subagent_type = '' } = c.input ?? {};
         agents.push({ kind: 'Agent', model, subagent_type, description, role: role(description, prompt), head: prompt.slice(0, 200) });
       } else if (c.name === 'SendMessage') {
-        const text = JSON.stringify(c.input ?? {});
-        agents.push({ kind: 'SendMessage', model: '(continued)', description: '', role: /review|round|verdict|resolved/i.test(text) ? 'reviewer' : 'other', head: text.slice(0, 200) });
+        const text = JSON.stringify(c.input ?? {}), msg = String(c.input?.message ?? '');
+        agents.push({ kind: 'SendMessage', model: '(continued)', description: '', role: /^\s*Round \d+/i.test(msg) ? 'reviewer' : 'other', head: text.slice(0, 200) });
       }
     }
   }
