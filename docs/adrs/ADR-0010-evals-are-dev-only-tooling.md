@@ -72,6 +72,17 @@ Alternatives considered:
 - `make check` and `validate.sh` do not look at `evals/`; only `node --test evals/plan-dag/report.test.mjs` covers its script.
 - Adding evals for another skill means copying `evals/plan-dag/` to `evals/<skill>/`.
 
+## Amendment (2026-11-13): a `claude -p` driver where `claude plugin eval` can't run the skill
+
+`skills/review-loop` dispatches subagents and commits with real `git`, and inside the plugin-eval
+sandbox `git` fails on macOS (see Negative above), so the behaviour under test can't run there.
+A skill like that may drive its evals as headless `claude -p` sessions from `evals/<skill>/run.sh`
+instead: each run in a throwaway repo outside this one, with user settings excluded, a scoped tool
+allowlist and a per-run budget cap. Everything else in this decision still holds. Cases keep the
+`claude plugin eval` layout (`prompt.md`, `case.yaml`, `graders/`), raw results stay in the
+gitignored `work/`, reports are committed under `reports/` with the CLI version, and nothing is
+installed. Prefer `claude plugin eval` whenever it can run the skill.
+
 ## References
 
 - [evals/README.md](../../evals/README.md)
