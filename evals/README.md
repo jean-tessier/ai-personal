@@ -4,7 +4,7 @@ Dev-only evals for skills in this repo, run with `claude plugin eval` (early acc
 version, see Prerequisites). This is not an asset category: nothing here is installed by `install.sh` or listed by `scripts/catalog.sh`.
 The ADR recording this decision is [ADR-0010](../docs/adrs/ADR-0010-evals-are-dev-only-tooling.md).
 
-Today there is one eval set, `evals/plan-dag/`.
+There are two eval sets: `evals/plan-dag/` (described below) and `evals/review-loop/` (see [its section](#review-loop)).
 
 ## Cost warning
 
@@ -181,3 +181,31 @@ J4 (`adr-conflict`, `oversized-slice`):
 Copy `evals/plan-dag/` to `evals/<skill>/`, rewrite the cases and `triggers.json`, and keep the shared parts (scaffold,
 fixtures, report script, grader prefixes) in place until a second skill needs them; only then factor them out. The
 `evals/*/work/` gitignore line already covers the new directory.
+
+## review-loop
+
+`evals/review-loop/` has three behaviour cases on one small Node fixture repo (`fixtures/coupons/`): `coupons-defaults`
+(six seeded defects, default models), `model-overrides` (same defects, Sonnet reviewer, no Haiku, 2-round cap) and
+`clean-branch` (a correct change the reviewer should accept). Cases use the `claude plugin eval` layout
+(`prompt.md`, `case.yaml`, `graders/`, `scaffold.sh`), but `run.sh` drives them as headless `claude -p`
+sessions instead: the skill dispatches subagents and commits with real `git`, and `git` fails inside the
+plugin-eval sandbox on macOS (see Known limits above and the 2026-11-13 amendment to ADR-0010).
+
+```bash
+bash evals/review-loop/run.sh <iteration> [case ...]     # COSTS REAL MONEY: both arms of every case, in parallel
+RUNS=5 bash evals/review-loop/run.sh <iteration>         # 5 repeats per case and arm (about $14 for all cases)
+node evals/review-loop/grade.mjs <arm-dir> [repo-dir]    # re-grade one run (free)
+```
+
+- Arms: `with_skill` copies `skills/review-loop` into the fixture repo and sends the case prompt; `without_skill`
+  has no skill and sends the outline a user would otherwise type, plus the same target. The skill exists to replace
+  that outline, so this is the comparison that matters.
+- Each run gets a fresh fixture repo under `$TMPDIR` (outside this repo, so this repo's `CLAUDE.md` doesn't load),
+  with user settings excluded (`--setting-sources project,local`), a scoped tool allowlist, and `--max-budget-usd`
+  per run (`BUDGET`, default 10).
+- Every grader is scripted in `grade.mjs` from the transcript and the final repo. A hidden behaviour test
+  (`fixtures/coupons/hidden.test.mjs`) never enters the subject's repo. Reviewer and fixer roles are classified by a
+  heuristic on each subagent's description, so check `outputs/agent-calls.md` when a role grader fails.
+- Results land in `work/iteration-<N>/<case>/<arm>/` (or `<arm>/run-<i>/` with `RUNS`), in the layout the
+  skill-creator viewer and its `aggregate_benchmark` script read. Reports under `reports/` are written from that
+  benchmark, not by a report script.

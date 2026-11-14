@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: model-overrides
+expected_outcome: |
+  Same seeded defects as coupons-defaults, with overrides: the reviewer runs on Sonnet, no subagent
+  runs on Haiku (Sonnet takes the mechanical fixes too), and there are at most 2 fix rounds. The
+  defects end up fixed and the final reply states the verdict.
+context:
+  scaffold_script: scaffold.sh
