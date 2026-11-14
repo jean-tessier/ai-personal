@@ -41,7 +41,7 @@ ignores the model override and inherits your context, which defeats the point of
 ## 1. Pin the target
 
 - **Working tree must be clean.** If it isn't, stop and ask whether to commit or stash first. Mixing the user's
-  uncommitted work into review commits is hard to untangle afterwards. Check this before any checkout.
+  uncommitted work into review commits is hard to untangle afterwards. Check the tree the loop will run in: this one before any checkout, or the other worktree's if you move there.
 - **PR number or URL:** `gh pr view <n> --json number,title,body,headRefName,baseRefName,url`; check out the head
   branch if it isn't already checked out (`gh pr checkout <n>`).
 - **Branch name, or nothing (use the current branch):** the base is the open PR's base if there is one, otherwise
