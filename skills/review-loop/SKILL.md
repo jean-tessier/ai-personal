@@ -40,14 +40,17 @@ ignores the model override and inherits your context, which defeats the point of
 
 ## 1. Pin the target
 
+- **Working tree must be clean.** If it isn't, stop and ask whether to commit or stash first. Mixing the user's
+  uncommitted work into review commits is hard to untangle afterwards. Check this before any checkout.
 - **PR number or URL:** `gh pr view <n> --json number,title,body,headRefName,baseRefName,url`; check out the head
   branch if it isn't already checked out (`gh pr checkout <n>`).
 - **Branch name, or nothing (use the current branch):** the base is the open PR's base if there is one, otherwise
-  the default branch.
-- Fetch the base if it has a remote, then fix `BASE=$(git merge-base <base> HEAD)` for the whole loop. Every review
-  reads `git diff $BASE...HEAD`, so the fixes you commit become part of what the reviewer sees.
-- **Working tree must be clean.** If it isn't, stop and ask whether to commit or stash first. Mixing the user's
-  uncommitted work into review commits is hard to untangle afterwards.
+  the default branch. If a named branch isn't the current one, `git switch <branch>`; if `git worktree list` shows
+  it checked out in another worktree, run the whole loop from that worktree (cd there and give that path to every
+  subagent) instead of switching.
+- If the base has a remote, `git fetch <remote> <base>` and fix `BASE=$(git merge-base <remote>/<base> HEAD)`;
+  otherwise `BASE=$(git merge-base <base> HEAD)`. Keep `BASE` for the whole loop. Every review reads
+  `git diff $BASE...HEAD`, so the fixes you commit become part of what the reviewer sees.
 - **Find the repo's check command** (from CLAUDE.md, CONTRIBUTING, Makefile, package.json scripts or CI config) and
   run it once now. Record the result as the baseline, so that failures already present on the branch aren't blamed on
   fixers. If there is none, say so; the review is then the only gate.
