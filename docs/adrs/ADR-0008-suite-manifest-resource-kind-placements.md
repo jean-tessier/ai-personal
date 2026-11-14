@@ -16,7 +16,7 @@ work, not part of this decision.
 
 ## Context
 
-ADR-0006 gave multi-harness suites a shape — canonical docs at the suite root, one subdirectory per
+ADR-0006 (since superseded by ADR-0007 for the copilot-suites premise below) gave multi-harness suites a shape — canonical docs at the suite root, one subdirectory per
 harness variant named by that harness's `scripts/harnesses.json` key — but accepted two tradeoffs
 alongside it, using `suites/tier-layered-teams` (the first and, so far, only suite in this shape) as
 the concrete case:
@@ -25,12 +25,11 @@ the concrete case:
   including sibling-harness subdirectories nothing on the current harness reads — "documented dead
   weight" rather than fixed, since excluding it would mean `install.sh` branching on suite-internal
   structure.
-- `copilot`'s entry in `harnesses.json` has no `suites` key at all, so a suite's `copilot/` variant
-  can never be placed by `install.sh` regardless of suite shape — always a manual `cp -R`. This is a
-  category-level, all-or-nothing gap: no suite can offer `install.sh` support for the `copilot`
-  harness, even one whose `copilot/` variant would install cleanly today (e.g. `tier-layered-teams`'s
-  `.github/agents/*.agent.md` files, which are safe per-item copies, same shape as
-  `tiered-escalation-suite`'s manual precedent).
+- `copilot`'s `harnesses.json` entry now has a `suites` mapping (ADR-0007), but `select_assets()`
+  only routes `pluginShaped` suites (a root `.claude-plugin/plugin.json`) through
+  `translate_to_copilot()`. `tier-layered-teams/copilot/` is a drop-in payload, not a plugin, so it
+  stays a manual `cp -R suites/tier-layered-teams/copilot/. <target>/` even though `install.sh`
+  supports the copilot harness for other suites.
 
 Underlying both gaps: `harnesses.json`'s `suites` mapping is a single destination template per
 harness (`"suites/{name}"`), too coarse to say "copy only this subtree" or "this harness's variant
@@ -47,6 +46,16 @@ A suite with no `manifest.json` keeps today's flat wholesale-copy behavior uncha
 suites (`handoff-workflow`, `hub-and-spoke-orchestration`, `tiered-team-orchestration`,
 `tiered-escalation-suite`) are unaffected.
 
+**Precedence.** When `manifest.json` is present it replaces `mapping.suites` and ADR-0007's
+`translate_to_copilot()` path for every harness it keys. Three cases, one outcome each:
+
+- A harness the manifest keys: install exactly its placements.
+- A harness the manifest omits: skipped with a one-line notice, even if its `mapping.suites` exists
+  (compatibility by omission, as in ADR-0003).
+- A `pluginShaped` suite that also has a manifest: the manifest wins and no translation runs. The
+  claude-code example therefore places `claude-code/.claude-plugin` so the install stays a plugin;
+  copilot content comes from its own placements, never from translated `agents/*.md`.
+
 **Keyed by harness name**, matching `scripts/harnesses.json`'s own keys — that file remains the
 naming authority (same principle ADR-0006 already established for variant subdirectory names). Each
 harness's value is a list of **placements**:
@@ -54,15 +63,19 @@ harness's value is a list of **placements**:
 ```json
 {
   "claude-code": [
-    { "kind": "agents", "src": "claude-code/agents", "mode": "copy" }
+    { "kind": "agents", "src": "claude-code/agents",         "mode": "copy" },
+    { "kind": "config", "src": "claude-code/.claude-plugin", "mode": "copy" }
   ],
   "copilot": [
     { "kind": "agents",       "src": "copilot/.github/agents",                  "mode": "copy"  },
     { "kind": "skills",       "src": "copilot/.github/skills",                  "mode": "copy"  },
     { "kind": "instructions", "src": "copilot/.github/copilot-instructions.md", "mode": "merge" },
+    { "kind": "hooks",        "src": "copilot/.github/hooks",                  "mode": "copy"  },
     { "kind": "config",       "src": "copilot/.vscode",                        "mode": "merge" },
     { "kind": "config",       "src": "copilot/Makefile",                       "mode": "merge" },
-    { "kind": "config",       "src": "copilot/scripts",                        "mode": "merge" }
+    { "kind": "config",       "src": "copilot/scripts",                        "mode": "merge" },
+    { "kind": "config",       "src": "copilot/.gitignore",                     "mode": "merge" },
+    { "kind": "config",       "src": "copilot/scratch",                        "mode": "merge" }
   ]
 }
 ```
@@ -70,15 +83,17 @@ harness's value is a list of **placements**:
 A placement is three fields:
 
 1. **`kind`** — a small, harness-agnostic vocabulary for what a resource *is*, not where it goes.
-   Four kinds, each with a concrete referent in `tier-layered-teams` today — the vocabulary is not
+   Five kinds, each with a concrete referent in `tier-layered-teams` today — the vocabulary is not
    speculative:
    - `agents` — one-file-per-role prompts (claude-code `agents/`, copilot `.github/agents/*.agent.md`)
    - `skills` — skill directories nested inside a suite variant (copilot's `.github/skills/*`),
      same shape as the top-level `skills` category
    - `instructions` — a singleton always-on context file (`copilot-instructions.md`); no per-item
      name, exactly one destination regardless of the suite's own name
+   - `hooks` — agent-hook definitions (copilot `.github/hooks/*.json`), including the gate that
+     blocks `--apply` until `./scratch/handoff/pending.diff` exists
    - `config` — repo-root passthrough that mirrors the target repo's own conventions
-     (`Makefile`, `.vscode/`, `scripts/`)
+     (`Makefile`, `.vscode/`, `scripts/`, `.gitignore`, `scratch/`)
 2. **`src`** — a suite-relative path (directory or single file) to place. Every item under a
    directory `src` inherits that placement's `kind`/`mode`; nothing is enumerated by filename.
 3. **`mode`** — `"copy"` places fresh content (today's create-only behavior); `"merge"` overlays
@@ -90,22 +105,54 @@ A placement is three fields:
 `resourceKinds` map alongside the existing `mapping`, e.g.:
 
 ```json
-"copilot": {
-  "mapping": { "skills": "skills/{name}" },
+"claude-code": {
+  "mapping": { "skills": "skills/{name}", "suites": "suites/{name}" },
   "resourceKinds": {
-    "agents":       ".github/agents/{basename}",
-    "skills":       ".github/skills/{basename}",
-    "instructions": ".github/copilot-instructions.md",
-    "config":       "{basename}"
+    "project": {
+      "agents": ".claude/suites/{suite}/agents/{basename}",
+      "config": ".claude/suites/{suite}/{relpath}"
+    },
+    "user": {
+      "agents": "~/.claude/suites/{suite}/agents/{basename}",
+      "config": "~/.claude/suites/{suite}/{relpath}"
+    }
+  }
+},
+"copilot": {
+  "mapping": { "skills": "skills/{name}", "suites": "suites/{name}" },
+  "resourceKinds": {
+    "project": {
+      "agents":       ".github/agents/{basename}",
+      "skills":       ".github/skills/{basename}",
+      "hooks":        ".github/hooks/{basename}",
+      "instructions": ".github/copilot-instructions.md",
+      "config":       "{relpath}"
+    }
   }
 }
 ```
 
-A `{basename}` placeholder preserves the source item's own filename (directory placements fan out
-per item); a template with no placeholder (`instructions`) is a fixed singleton destination. This
-split is what makes the schema extend to a future harness without touching any existing suite's
-manifest: a new harness needs only its own `resourceKinds` map; a suite opts in by adding one
-manifest entry using the existing kind vocabulary.
+**Resolution rules.** `resourceKinds` is keyed per scope, and its templates resolve against the
+target **project root** (or `~` for a user scope), not the scope root that `mapping` templates use
+(copilot's `.github`); a kind missing for the chosen scope is skipped by omission, as in ADR-0003.
+Placeholders:
+
+- `{suite}` — the suite's directory name.
+- `{basename}` — for `agents`, `skills`, and `hooks`, the item is each immediate child of the
+  directory `src` (a file, or a skill directory copied whole); `{basename}` is that child's name.
+- `{relpath}` — for `config`, the item is `src` itself (file or directory, copied recursively);
+  `{relpath}` is its path relative to `dirname(src)`, so `copilot/.vscode` becomes `.vscode` (keeping
+  `.vscode/settings.json`), `copilot/Makefile` becomes `Makefile`, and `copilot/scripts` becomes
+  `scripts`.
+
+A template with no placeholder (`instructions`) is a fixed singleton destination. Traced through
+these rules, every copilot placement lands where `cp -R suites/tier-layered-teams/copilot/. <target>/`
+puts it today. In the claude-code example the plugin shape is preserved under
+`.claude/suites/{suite}/`, so `claude-code/agents/00-escalation-protocol.md` (no agent frontmatter,
+linked relatively from 01-04) stays beside its siblings as it does today rather than landing in
+`.claude/agents/`. This split is what makes the schema extend to a future harness without touching
+any existing suite's manifest: a new harness needs only its own `resourceKinds` map; a suite opts in
+by adding one manifest entry using the existing kind vocabulary.
 
 **Suite-root shared docs (`README.md`, `USAGE.md`, `PROTOCOL.md`) get no kind and are never
 installed.** They stay repo-only reference material describing the harness-agnostic pattern; only
@@ -122,9 +169,9 @@ filesystem, the same drift ADR-0006 already fought once with `PROTOCOL.md`'s mir
 
 - A claude-code install of a multi-harness suite stops dragging in inert sibling-harness bytes —
   fixes ADR-0006's accepted "documented dead weight" tradeoff.
-- `copilot` (and any future harness) becomes installable per suite, per kind, instead of the current
-  categorical all-or-nothing gap — a suite manifest can offer `copilot` support even though
-  `harnesses.json`'s `copilot.mapping` still has no `suites` key.
+- `copilot` (and any future harness) becomes installable per suite, per kind, instead of
+  `mapping.suites`' all-or-nothing, plugin-shaped-only reach — a drop-in payload like
+  `tier-layered-teams/copilot/` can be installed without becoming a plugin.
 - Adding a harness is additive (give it a `resourceKinds` map); adding a suite variant is additive
   (tag its subtrees with the existing kind vocabulary). Neither requires an `install.sh` code change
   — preserves ADR-0003's no-branching-on-harness-name design.
@@ -136,7 +183,7 @@ filesystem, the same drift ADR-0006 already fought once with `PROTOCOL.md`'s mir
   `Makefile`, `.vscode/`, or `copilot-instructions.md`) are undecided by this ADR. `install.sh` has
   no merge capability today, so a manifest that declares `mode: "merge"` currently describes intent
   nothing executes — real conflict-resolution behavior is deferred implementation work.
-- The kind vocabulary (`agents`/`skills`/`instructions`/`config`) is derived from the one existing
+- The kind vocabulary (`agents`/`skills`/`instructions`/`hooks`/`config`) is derived from the one existing
   multi-harness suite. A future suite or harness may need a kind this list doesn't cover; growing the
   vocabulary is additive, not breaking, but is a real open edge, not a closed one.
 - Suites now have two optional colocated JSON files (`dependencies.json` from ADR-0009,
@@ -154,8 +201,11 @@ filesystem, the same drift ADR-0006 already fought once with `PROTOCOL.md`'s mir
 - ADR-0003 (`docs/adrs/ADR-0003-data-driven-harness-manifest.md`) — data-driven harness manifest and
   compatibility-by-omission; the no-suite-name-branching principle this schema preserves.
 - ADR-0006 (`docs/adrs/ADR-0006-harness-variant-subdirectories-in-suites.md`) — harness-variant
-  subdirectory convention; the "documented dead weight" and categorical copilot-suites gap this ADR
-  addresses.
+  subdirectory convention (superseded by ADR-0007 for its copilot-suites premise); the "documented dead
+  weight" tradeoff this ADR addresses.
+- ADR-0007 (`docs/adrs/ADR-0007-suites-as-native-plugins.md`) — suites as native plugins; added
+  copilot's `suites` mapping and the `pluginShaped`/`translate_to_copilot()` path the manifest
+  precedence rule overrides.
 - ADR-0009 (`docs/adrs/ADR-0009-colocated-dependency-manifest.md`) — colocated
   `{category}/{name}/dependencies.json`; the sibling per-asset JSON file convention `manifest.json`
   reuses.
