@@ -92,8 +92,8 @@ A placement is three fields:
      name, exactly one destination regardless of the suite's own name
    - `hooks` — agent-hook definitions (copilot `.github/hooks/*.json`), including the gate that
      blocks `--apply` until `./scratch/handoff/pending.diff` exists
-   - `config` — repo-root passthrough that mirrors the target repo's own conventions
-     (`Makefile`, `.vscode/`, `scripts/`, `.gitignore`, `scratch/`)
+   - `config` — variant-root passthrough placed at its own relative path (`{relpath}`): copilot's
+     `Makefile`, `.vscode/`, `scripts/`, `.gitignore`, `scratch/`; claude-code's `.claude-plugin/`
 2. **`src`** — a suite-relative path (directory or single file) to place. Every item under a
    directory `src` inherits that placement's `kind`/`mode`; nothing is enumerated by filename.
 3. **`mode`** — `"copy"` places fresh content (today's create-only behavior); `"merge"` overlays
@@ -132,8 +132,9 @@ A placement is three fields:
 }
 ```
 
-**Resolution rules.** `resourceKinds` is keyed per scope, and its templates resolve against the
-target **project root** (or `~` for a user scope), not the scope root that `mapping` templates use
+**Resolution rules.** `resourceKinds` is keyed per scope, and its templates resolve as `resolve_root()`
+in `install.sh` resolves paths: a relative template against the target **project root** (`$PWD`),
+a `~/` template against `$HOME`, not against the scope root that `mapping` templates use
 (copilot's `.github`); a kind missing for the chosen scope is skipped by omission, as in ADR-0003.
 Placeholders:
 
