@@ -33,6 +33,7 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 19 | The plan-dag "at most 4 questions per call" rule can't be tested headless: `AskUserQuestion` is absent in `claude plugin eval` runs | future-work | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
 | 20 | plan-dag's dispatch, watch and close-out phases are not evaluated (the runner refuses Monitor and worktree tools) | future-work | low | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
 | 21 | plan-dag references `review-loop`, `board-refresh` and `session-retro` skills and `.claude/agents/builder.md`, none of which ship in this repo: add them or drop the steps | open-decision | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | partly resolved 2026-11-13: `skills/review-loop` added; `board-refresh`, `session-retro` and `builder.md` still missing |
+| 22 | Implement ADR-0008 suite manifest: resourceKinds in harnesses.json, manifest.json read/validate in catalog.sh/validate.sh/install.sh, migrate tier-layered-teams, decide merge-mode semantics | future-work | normal | ADR-0008 (PR #10) | 2026-11-13 | |
 
 > Item 1: two corroborating VS Code-specific sources (product docs + the
 > `microsoft/vscode-copilot-chat` extension repo) show `hookSpecificOutput.permissionDecision`
