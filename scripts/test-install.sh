@@ -6,8 +6,8 @@
 # built under mktemp -d, so nothing touches the real repo or the real home
 # directory — every sandbox is deleted on exit, pass or fail. Uses install.sh's
 # undocumented test seams (--local, INSTALL_FORCE_INTERACTIVE); see
-# docs/memory/vendor-agnostic-installer.md. Does not exercise the real
-# curl/tar network fetch — see that doc for the manual recipe for that.
+# docs/memory/vendor-agnostic-installer.md. The fetch path is covered with a
+# stubbed curl (stub_curl); the real network fetch is never exercised.
 #
 # For full container isolation instead of local mktemp sandboxes, use
 # scripts/test-install-docker.sh.
@@ -384,6 +384,37 @@ test_copilot_dep_on_non_plugin_shaped_suite_skipped() {
   assert_exists "dependent skill still installed" "$sb/cwd/.github/skills/fake-skill"
 }
 
+# ── fetch path via a stubbed curl (no network) ───────────────────────────────
+# stub_curl <sandbox>: puts a fake `curl` on <sandbox>/bin. It appends its args
+# to <sandbox>/curl.args and writes, to the -o target, a codeload-shaped tarball
+# (top dir ai-personal-main/) of a minimal repo. Portable tar only: no bsdtar -s.
+stub_curl() {
+  local sb="$1" top="$1/fake/ai-personal-main"
+  mkdir -p "$top/scripts" "$top/skills/demo"
+  cp "$REPO/scripts/catalog.sh" "$REPO/scripts/harnesses.json" "$top/scripts/"
+  printf -- '---\nname: demo\ndescription: stub\n---\n' > "$top/skills/demo/SKILL.md"
+  cat > "$sb/bin/curl" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$sb/curl.args"
+while [[ \$# -gt 0 ]]; do [[ "\$1" == -o ]] && out="\$2"; shift; done
+tar -czf "\$out" -C "$sb/fake" ai-personal-main
+STUB
+  chmod +x "$sb/bin/curl"
+}
+
+test_fetch_via_stubbed_curl() {
+  _head "real fetch path (stubbed curl, no --local)"
+  local sb out code
+  sb="$(new_sandbox)"
+  stub_curl "$sb"
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "requested the codeload tarball URL" "$(cat "$sb/curl.args" 2>&1)" \
+    "https://codeload.github.com/jean-tessier/ai-personal/tar.gz/main"
+  assert_exists "skill from the extracted tarball installed" "$sb/cwd/.claude/skills/demo/SKILL.md"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -406,6 +437,7 @@ test_no_deps_flag_skips_dependencies
 test_copilot_suite_translation
 test_copilot_skips_non_plugin_shaped_suite
 test_copilot_dep_on_non_plugin_shaped_suite_skipped
+test_fetch_via_stubbed_curl
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
