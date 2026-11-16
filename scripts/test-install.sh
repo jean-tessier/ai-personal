@@ -458,6 +458,29 @@ test_manifest_lint_rejects_bad_manifest() {
   assert_contains "flags the typo'd category" "$out" "unknown category 'suite'"
 }
 
+test_fetch_curl_failure_exits_1() {
+  _head "failed curl fetch exits 1 with a message (not curl's own code)"
+  local sb out code
+  sb="$(new_sandbox)"
+  printf '#!/usr/bin/env bash\nexit 22\n' > "$sb/bin/curl"; chmod +x "$sb/bin/curl"
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills 2>&1 )"; code=$?
+  assert_exit "exits 1, not curl's 22" 1 "$code"
+  assert_contains "prints the fetch failure" "$out" "fetch failed"
+}
+
+test_fetch_bad_tarball_exits_1() {
+  _head "failed tar extraction exits 1 with a message"
+  local sb out code
+  sb="$(new_sandbox)"
+  printf '#!/usr/bin/env bash\nwhile [[ $# -gt 0 ]]; do [[ "$1" == -o ]] && echo junk > "$2"; shift; done\n' > "$sb/bin/curl"
+  chmod +x "$sb/bin/curl"
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills 2>&1 )"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "prints the extraction failure" "$out" "extract failed"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -483,6 +506,8 @@ test_copilot_skips_non_plugin_shaped_suite
 test_copilot_dep_on_non_plugin_shaped_suite_skipped
 test_fetch_via_stubbed_curl
 test_manifest_lint_rejects_bad_manifest
+test_fetch_curl_failure_exits_1
+test_fetch_bad_tarball_exits_1
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
