@@ -646,6 +646,105 @@ test_empty_scope_root_anchors_at_pwd() {
 }
 test_empty_scope_root_anchors_at_pwd
 
+# Install record (ADR-0012): <scope root>/.ai-personal-install.json lists every placed file + sha256.
+# record_check <record> <cwd> <home> prints "<files recorded> <missing or mismatched>".
+record_check() {
+  local py
+  read -r -d '' py <<'PY' || true
+import json, sys, os, hashlib
+rec, cwd, home = sys.argv[1:4]
+n = bad = 0
+for a in json.load(open(rec))["assets"].values():
+    for k, h in a["files"].items():
+        p = os.path.join(home, k[2:]) if k.startswith("~/") else os.path.join(cwd, k)
+        n += 1
+        if not os.path.isfile(p) or h != "sha256:" + hashlib.sha256(open(p, "rb").read()).hexdigest():
+            bad += 1
+print(n, bad)
+PY
+  python3 -c "$py" "$@"
+}
+
+# record_json <record> <python expr on d>: prints the expression's value.
+record_json() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$@"; }
+
+test_record_lists_every_copied_file() {
+  _head "install record lists every copied file with its sha256"
+  local sb rec on_disk
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  assert_exists "record written under the scope root" "$rec"
+  on_disk="$(cd "$sb/cwd" && find .claude -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
+  assert_contains "valid JSON, all hashes match, every file on disk recorded" "$(record_check "$rec" "$sb/cwd" "$sb/home")" "$on_disk 0"
+  assert_contains "paths are root-anchored" "$(record_json "$rec" 'sorted(d["assets"]["skills/atomic-commits"]["files"])[0]')" ".claude/skills/atomic-commits/"
+  assert_contains "records harness and scope" "$(record_json "$rec" 'd["harness"], d["scope"], d["version"]')" "('claude-code', 'project', 1)"
+}
+
+test_record_covers_copilot_translation_and_dependencies() {
+  _head "install record covers translated suites and dependency copies"
+  local sb rec
+  sb="$(new_sandbox)"; rec="$sb/cwd/.github/.ai-personal-install.json"
+  run_install "$sb" --harness copilot --scope project --assets suites --yes-deps </dev/null >/dev/null 2>&1
+  assert_contains "translated files hash as placed" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 0"
+  assert_contains "a translated plugin.json is recorded" "$(record_json "$rec" '[k for a in d["assets"].values() for k in a["files"] if k.endswith("/plugin.json")]')" "/plugin.json"
+  assert_contains "a dependency is recorded as its own asset" "$(record_json "$rec" 'sorted(d["assets"])')" "'skills/"
+}
+
+test_record_merges_on_reinstall() {
+  _head "re-install merges into the record instead of clobbering it"
+  local sb rec
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["assets"]["skills/earlier"]={"installedAt":"x","files":{".claude/skills/earlier/SKILL.md":"sha256:0"}}; d["assets"]["skills/atomic-commits"]["installedAt"]="x"; json.dump(d,open(p,"w"))' "$rec"
+  run_install "$sb" --harness claude-code --scope project --assets skills --force </dev/null >/dev/null 2>&1
+  assert_contains "earlier asset survives" "$(record_json "$rec" '"skills/earlier" in d["assets"]')" "True"
+  assert_contains "re-installed asset is refreshed" "$(record_json "$rec" 'd["assets"]["skills/atomic-commits"]["installedAt"] != "x"')" "True"
+  assert_contains "only the stale entry fails its hash check" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 1"
+}
+
+test_record_skipped_files_not_recorded_and_dry_run_writes_none() {
+  _head "skipped destinations are not recorded; --dry-run writes no record"
+  local sb
+  sb="$(new_sandbox)"
+  run_install "$sb" --harness claude-code --scope project --assets skills --dry-run </dev/null >/dev/null 2>&1
+  assert_missing "dry run: no record" "$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/.claude/skills/atomic-commits"; printf 'mine\n' > "$sb/cwd/.claude/skills/atomic-commits/SKILL.md"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  assert_contains "the user's own skill is never recorded" \
+    "$(record_json "$sb/cwd/.claude/.ai-personal-install.json" '"skills/atomic-commits" in d["assets"]')" "False"
+}
+
+test_record_source_ref() {
+  _head "install record stores --ref as source.ref, null under --local"
+  local sb
+  sb="$(new_sandbox)"
+  stub_curl "$sb" ai-personal-9
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills --ref v9 </dev/null >/dev/null 2>&1 )
+  assert_contains "--ref v9 recorded" "$(record_json "$sb/cwd/.claude/.ai-personal-install.json" 'd["source"]')" "'ref': 'v9'"
+  sb="$(new_sandbox)"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  assert_contains "--local records ref null" "$(record_json "$sb/cwd/.claude/.ai-personal-install.json" 'd["source"]')" "'ref': None"
+}
+
+test_record_user_scope_root() {
+  _head "install record for user scope lives under the user root"
+  local sb rec
+  sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  assert_exists "record under \$HOME/.claude" "$rec"
+  assert_missing "cwd untouched" "$sb/cwd/.claude"
+  assert_contains "paths are ~-anchored and match on disk" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 0"
+  assert_contains "keys start with ~/.claude/" "$(record_json "$rec" 'sorted(d["assets"]["skills/atomic-commits"]["files"])[0]')" "~/.claude/skills/"
+}
+
+test_record_lists_every_copied_file
+test_record_covers_copilot_translation_and_dependencies
+test_record_merges_on_reinstall
+test_record_skipped_files_not_recorded_and_dry_run_writes_none
+test_record_source_ref
+test_record_user_scope_root
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"

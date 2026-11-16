@@ -163,6 +163,31 @@ elif mode == "suite_plugin_shaped":
     it = find_item(catalog, "suites", args[0])
     sys.exit(0 if it and it.get("pluginShaped") else 1)
 
+elif mode == "record":
+    import datetime, hashlib
+    path, harness, scope, repo, ref, tsv = args
+    rec = {"version": 1, "assets": {}}
+    if os.path.exists(path):
+        rec = load(path)
+        if rec.get("version") != 1:
+            sys.exit(f"unsupported install record version in {path}")
+    rec.update(harness=harness, scope=scope, source={"repo": repo, "ref": ref or None})
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with open(tsv) as f:
+        rows = [line.rstrip("\n").split("\t") for line in f]
+    for asset, spec, abspath in rows:
+        placed = [(spec, abspath)] if os.path.isfile(abspath) else [
+            (spec + "/" + os.path.relpath(os.path.join(d, n), abspath).replace(os.sep, "/"), os.path.join(d, n))
+            for d, _, names in os.walk(abspath) for n in names]
+        entry = rec["assets"].setdefault(asset, {"files": {}})
+        entry["installedAt"] = now
+        for key, file in placed:
+            with open(file, "rb") as fh:
+                entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+    with open(path, "w") as f:
+        json.dump(rec, f, indent=2, sort_keys=True)
+        f.write("\n")
+
 else:
     sys.exit(f"unknown mode: {mode}")
 PY
@@ -542,6 +567,21 @@ resolve_root() {
   esac
 }
 
+# ── Install record (ADR-0012) ───────────────────────────────────────────────
+# Every write path calls record_write; record_flush then hashes what was placed
+# and merges it into <scope root>/.ai-personal-install.json. Dry runs never call
+# record_write, so they write no record.
+RECORD_TSV="$WORK/record.tsv"
+
+# record_write <asset> <dest_spec>: log one placed file or directory.
+record_write() { printf '%s\t%s\t%s\n' "$1" "$2" "$(resolve_root "$2")" >> "$RECORD_TSV"; }
+
+record_flush() {
+  [[ -s "$RECORD_TSV" ]] || return 0
+  _json record "$(resolve_root "${SCOPE_ROOT:+$SCOPE_ROOT/}.ai-personal-install.json")" \
+    "$HARNESS" "$SCOPE" "$OWNER/$REPO_NAME" "$([[ -n "$LOCAL_PATH" ]] || printf '%s' "$REF")" "$RECORD_TSV"
+}
+
 # ── Copy (or report, in --dry-run) ──────────────────────────────────────────
 apply_selection() {
   if [[ ! -s "$SELECTION_FILE" ]]; then
@@ -579,8 +619,10 @@ apply_selection() {
     if [[ "$transform" != "-" ]]; then
       transform_apply "$transform" "$dest"
     fi
+    record_write "$asset" "$dest_spec"
     _ok "${dest_spec#"$SCOPE_ROOT"/}"
   done < "$SELECTION_FILE"
+  record_flush
 }
 
 main() {
