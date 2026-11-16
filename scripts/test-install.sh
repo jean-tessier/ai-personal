@@ -1630,6 +1630,18 @@ test_uninstall_confined_when_the_record_is_in_home() {
   assert_exit "scope root ~: exits 1" 1 "$code"
   assert_contains "scope root ~: says why" "$out" "itself"
   assert_exists "scope root ~: nothing deleted" "$sb/home/.zshrc"
+  # a symlinked directory inside the scope root can't lead out of it
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude/skills" "$sb/home/Projects/foo"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'mine\n' > "$sb/home/Projects/foo/README.md"
+  ln -s .. "$sb/home/.claude/up"; ln -s ../../Projects/foo "$sb/home/.claude/skills/foo"
+  for f in up/.zshrc skills/foo/README.md; do
+    write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code user "$sb/home/.claude" "~/.claude/" "$f"
+    out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+    assert_exit "~/.claude/$f via a symlinked dir: exits 1" 1 "$code"
+    assert_contains "~/.claude/$f via a symlinked dir: says why" "$out" "resolves outside the scope root"
+  done
+  assert_exists "~/.zshrc untouched" "$sb/home/.zshrc"
+  assert_exists "~/Projects/foo/README.md untouched" "$sb/home/Projects/foo/README.md"
 }
 
 # The project root is never pruned, even when it sits inside the scope root.

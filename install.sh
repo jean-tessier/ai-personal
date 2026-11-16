@@ -352,11 +352,15 @@ elif mode == "uninstall":
             if confine and not k.startswith(sr):
                 sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr}; nothing was deleted")
             t = k[2:] if user else k
-            r = entry(os.path.join(base, t)) if t and not ctrl(k) else ""
             if (not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
-                    or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))
-                    or not r.startswith(bb + os.sep)
-                    or ".git" in r[len(bb) + 1:].lower().split(os.sep)):  # a symlink into .git, too
+                    or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))):
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
+            r = entry(os.path.join(base, t))  # resolved only after the text checks pass
+            inside = root if confine else bb
+            if not r.startswith(inside + os.sep):
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a} resolves outside "
+                         f"{'the scope root ' if confine else ''}{inside} (a symlinked directory?); nothing was deleted")
+            if ".git" in r[len(bb) + 1:].lower().split(os.sep):  # a symlink into .git, too
                 sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
             paths[k] = os.path.join(base, t)
     sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]
