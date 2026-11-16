@@ -87,7 +87,7 @@ CATEGORIES=()
 # pipe, since tr always exits 0.
 _json() {
   { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 -I - "$@" <<'PY'
-import json, os, sys
+import json, os, stat, sys
 
 def load(path):
     with open(path) as f:
@@ -98,6 +98,8 @@ def load_record(path, harness, scope):
     def bad(why):
         sys.exit(f"install record {path}: {why}")
     try:
+        if not stat.S_ISREG(os.stat(path).st_mode):
+            bad("not a regular file")  # a FIFO would block the read forever
         rec = load(path)
     except (ValueError, OSError) as e:
         bad(f"not valid JSON ({e})")
@@ -320,9 +322,13 @@ elif mode == "uninstall":
     path = entry(os.path.join(home, spec[2:]) if user else os.path.join(cwd, spec))
     if not path.startswith(bb + os.sep):
         sys.exit(f"install record {path} is outside {bb}; nothing was deleted")
-    if not os.path.lexists(path):
+    try:
+        os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
         print(f"  note  no install record at {path}; nothing to uninstall")
         sys.exit(0)
+    except OSError as e:
+        sys.exit(f"install record {path}: {e.strerror}; nothing was deleted")
     rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
     root = os.path.dirname(path)
     # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
@@ -373,6 +379,8 @@ elif mode == "uninstall":
                 st = os.lstat(p)  # guard 4: look before touching
             except (FileNotFoundError, NotADirectoryError):
                 continue  # already gone: forgotten
+            except OSError as e:
+                sys.exit(f"install record {path}: cannot check {k!r}: {e.strerror}; nothing was deleted")
             if ident(p) in own:
                 print(f"  skip    {k} (the install record or the scope root)")
             elif not (stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)):

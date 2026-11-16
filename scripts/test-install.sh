@@ -1629,6 +1629,36 @@ test_uninstall_refuses_bad_or_missing_record() {
     assert_not_contains "record '$bad': no traceback" "$out" "Traceback"
     assert_exit "record '$bad': nothing deleted" "$n" "$(count_files "$sb/home")"
   done
+  # a FIFO record must be refused at once, never opened (a stuck reader is released after 10s)
+  rm "$sb/home/.claude/.ai-personal-install.json"; mkfifo "$sb/home/.claude/.ai-personal-install.json"
+  ( run_uninstall "$sb" --harness claude-code --scope user </dev/null > "$sb/fifo.out" 2>&1; echo $? > "$sb/fifo.code" ) &
+  for i in 1 2 3 4 5 6 7 8 9 10; do [[ -f "$sb/fifo.code" ]] && break; sleep 1; done
+  [[ -f "$sb/fifo.code" ]] && _ok "FIFO record: returns without waiting on it" || _fail "FIFO record: returns without waiting on it"
+  python3 -c 'import os,sys; os.close(os.open(sys.argv[1], os.O_WRONLY|os.O_NONBLOCK))' "$sb/home/.claude/.ai-personal-install.json" 2>/dev/null
+  wait
+  assert_exit "FIFO record: exits 1" 1 "$(cat "$sb/fifo.code")"
+  assert_contains "FIFO record: says why" "$(cat "$sb/fifo.out")" "not a regular file"
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't hide the record"; return; fi
+  rm "$sb/home/.claude/.ai-personal-install.json"; chmod 000 "$sb/home/.claude"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  chmod 755 "$sb/home/.claude"
+  assert_exit "unreadable scope root: exits 1" 1 "$code"
+  assert_not_contains "unreadable scope root: not reported as a missing record" "$out" "no install record"
+}
+
+test_uninstall_unreadable_asset_dir_aborts() {
+  _head "--uninstall aborts cleanly when it can't check a recorded path"
+  local sb out code d n
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block lstat"; return; fi
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  n="$(count_files "$sb/cwd")"; chmod 000 "$d/plan-dag"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  chmod 755 "$d/plan-dag"
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "says which path" "$out" "cannot check"
+  assert_not_contains "no traceback" "$out" "Traceback"
+  assert_exit "nothing deleted" "$n" "$(count_files "$sb/cwd")"
 }
 
 test_uninstall_keeps_shared_record_and_scope_root() {
@@ -1768,6 +1798,7 @@ test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
 test_uninstall_prune_stops_at_cwd
 test_uninstall_refuses_bad_or_missing_record
+test_uninstall_unreadable_asset_dir_aborts
 test_uninstall_keeps_shared_record_and_scope_root
 test_uninstall_file_shared_by_two_uninstalled_assets
 test_uninstall_compares_files_not_spellings
