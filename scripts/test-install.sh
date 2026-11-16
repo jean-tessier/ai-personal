@@ -492,7 +492,7 @@ test_translate_unknown_or_invalid_skips() {
     out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --local "$src" --harness copilot --scope project --assets suites --no-deps </dev/null 2>&1 )"; code=$?
     assert_exit "translate=$bad: exits 0" 0 "$code"
     assert_contains "translate=$bad: warns about the transform" "$out" "unknown translate transform"
-    assert_missing "translate=$bad: nothing installed" "$sb/cwd/.github/suites"
+    assert_missing "translate=$bad: nothing translated under .github/suites" "$sb/cwd/.github/suites"
   done
 }
 
@@ -1432,6 +1432,17 @@ test_tlt_claude_code_user_scope() {
   assert_record "user-scope record matches" "$sb/home/.claude/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 9
 }
 test_tlt_claude_code_user_scope
+
+test_tlt_force_restores_exec_bit() {
+  _head "--force over a user's non-executable scripts/preflight.sh leaves the payload's exec bit"
+  local sb
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; mkdir -p "$sb/cwd/scripts"
+  printf 'MINE\n' > "$sb/cwd/scripts/preflight.sh"; chmod 644 "$sb/cwd/scripts/preflight.sh"
+  tlt_install "$sb" --harness copilot --scope project --force >/dev/null
+  assert_exit "content overwritten" 0 "$(cmp -s "$sb/cwd/scripts/preflight.sh" "$REPO/suites/tier-layered-teams/copilot/scripts/preflight.sh"; echo $?)"
+  [[ -x "$sb/cwd/scripts/preflight.sh" ]] && _ok "exec bit is the payload's, not the old file's mode" || _fail "preflight.sh stayed non-executable after --force"
+}
+test_tlt_force_restores_exec_bit
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then

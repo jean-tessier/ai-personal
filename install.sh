@@ -775,6 +775,7 @@ apply_selection() {
           continue
         fi
         mkdir -p "$(dirname "$dest")"
+        [[ -e "$dest" ]] && rm -f "$dest"   # --force: cp keeps an old file's mode, so replace it
         cp "$src" "$dest"
         record_write "$asset" "$dest_spec"
         _ok "${dest_spec#"$SCOPE_ROOT"/}"
