@@ -12,6 +12,10 @@ status: accepted
 Accepted — supersedes the dependency-resolution half of
 [ADR-0007](ADR-0007-suites-as-native-plugins.md).
 
+[ADR-0011](ADR-0011-translate-transforms-as-harness-data.md) records that a dependency a harness
+cannot translate (for Copilot, a non-plugin-shaped suite) is warned and skipped, like a dependency
+in an unmapped category. This ADR is otherwise unchanged.
+
 ## Context
 
 Some assets in this repo only work alongside others — installing `suites/handoff-workflow`

@@ -1,5 +1,5 @@
 ---
-date: 2026-11-13
+date: 2026-11-15
 description: Known deferred items, open decisions, and future work to revisit in later sessions
 status: active
 tags: [backlog, deferred]
@@ -20,7 +20,7 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 6 | Installed-assets manifest for future uninstall/update support (`install.sh`) | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | |
 | 7 | ~~`tasks` category name carries a stray `.md` from `catalog.sh`'s file-basename vs. `harnesses.json`'s `{name}.md` template — defensively stripped in `install.sh`, untested against real data since `prompts/tasks/` is currently empty~~ | tech-debt | low | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | moot 2026-07-08 (`prompts/tasks/` and the `tasks` category removed entirely — see ADR-0001 superseded note) |
 | 8 | ~~`feature/vendor-agnostic-installer` is committed locally (5 commits: harnesses.json, install.sh, README docs, validate.sh integration, ADR/memory ingestion) but not pushed; `origin/main` is still at `1763ef7`, predating this whole effort~~ | future-work | normal | handoff.md § Open items (vendor-agnostic-installer) | 2026-07-01 | resolved 2026-11-15 (`origin/main` already contains the installer commits, starting with `6e532b2 feat: add install.sh vendor-agnostic installer`) |
-| 9 | `install.sh`'s Copilot-suite translation (ADR-0007) is gated by three `is_copilot_suite_category()` calls hardcoded in `install.sh`'s own control flow, not expressed as data in `scripts/harnesses.json` the way `mapping` is — a partial reintroduction of the harness-name branching ADR-0003 was written to eliminate | tech-debt | normal | code review, 2026-07-13 session | 2026-07-13 | |
+| 9 | ~~`install.sh`'s Copilot-suite translation (ADR-0007) is gated by three `is_copilot_suite_category()` calls hardcoded in `install.sh`'s own control flow, not expressed as data in `scripts/harnesses.json` the way `mapping` is — a partial reintroduction of the harness-name branching ADR-0003 was written to eliminate~~ | tech-debt | normal | code review, 2026-07-13 session | 2026-07-13 | resolved 2026-11-15 (`translate` key in `scripts/harnesses.json`, transform registry in `install.sh`; see ADR-0011) |
 | 10 | ~~Add test_deps_unsupported_category_warns case to scripts/test-install.sh~~ | tech-debt | low | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | done 2026-11-15 (`test_deps_unsupported_category_warns` in `scripts/test-install.sh`) |
 | 11 | ~~Decide whether/when to merge feature/asset-dependency-manifest into main~~ | open-decision | normal | handoff.md § Open items (asset-dependency-manifest) | 2026-07-12 | resolved 2026-11-15 (merged as PR #9, commit `ae695d6`) |
 | 12 | Re-run the plan-dag trigger suite with a higher max_turns; 93 of 160 runs hit the 4-turn cap, so later triggers are never seen (~$23) | tech-debt | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | |
