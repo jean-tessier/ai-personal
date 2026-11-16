@@ -882,6 +882,320 @@ test_record_survives_midway_failure
 test_record_mode_rejects_missing_placed_path
 test_validate_rejects_symlinks_in_assets
 
+# Suite manifest placements (ADR-0008, copy mode): a fixture suite "fx" with a manifest.json.
+# manifest_fixture <sandbox> <manifest json>: builds <sandbox>/fake_src (real harnesses.json) and prints its path.
+manifest_fixture() {
+  local src="$1/fake_src"
+  mkdir -p "$src/scripts" "$src/suites/fx/claude-code/agents" "$src/suites/fx/claude-code/.claude-plugin" \
+    "$src/suites/fx/copilot/.github/hooks" "$src/suites/fx/copilot/scripts"
+  cp "$REPO/scripts/catalog.sh" "$REPO/scripts/harnesses.json" "$src/scripts/"
+  printf '# fx\n' > "$src/suites/fx/README.md"
+  printf 'agent a\n' > "$src/suites/fx/claude-code/agents/a.md"
+  printf 'agent b\n' > "$src/suites/fx/claude-code/agents/b.md"
+  printf '{}\n' > "$src/suites/fx/claude-code/.claude-plugin/plugin.json"
+  printf 'hook\n' > "$src/suites/fx/copilot/.github/hooks/h.json"
+  printf 'rules\n' > "$src/suites/fx/copilot/.github/copilot-instructions.md"
+  printf 'all:\n' > "$src/suites/fx/copilot/Makefile"
+  printf 'echo\n' > "$src/suites/fx/copilot/scripts/run.sh"
+  printf '%s' "$2" > "$src/suites/fx/manifest.json"
+  printf '%s' "$src"
+}
+FX_CC='{"claude-code":[{"kind":"agents","src":"claude-code/agents","mode":"copy"},{"kind":"config","src":"claude-code/.claude-plugin","mode":"copy"}]}'
+fx_install() { # <sandbox> <src> <args...>
+  local sb="$1" src="$2"; shift 2
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --local "$src" --scope project --assets suites "$@" ) 2>&1 </dev/null
+}
+
+test_manifest_places_files_per_template() {
+  _head "a manifest suite is placed per file at its resourceKinds destinations, and recorded"
+  local sb src out code d rec
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; d="$sb/cwd/.claude/suites/fx"
+  rec="$sb/cwd/.claude/.ai-personal-install.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "agents placed by basename" "$d/agents/a.md"
+  assert_exists "second agent placed" "$d/agents/b.md"
+  assert_exists "config placed at its relpath" "$d/.claude-plugin/plugin.json"
+  assert_missing "suite-root README is not placed" "$d/README.md"
+  assert_missing "sibling-harness variant is not placed" "$d/copilot"
+  assert_record "record lists the 3 placed files, hashes match" "$rec" "$sb/cwd" "$sb/home" 0 3
+  assert_contains "record keys them under the suite asset" "$(record_json "$rec" 'sorted(d["assets"]["suites/fx"]["files"])[0]')" ".claude/suites/fx/.claude-plugin/plugin.json"
+}
+test_manifest_places_files_per_template
+
+test_manifest_existing_file_skipped_and_force_never_removes_dir() {
+  _head "an existing placed file is skipped; --force overwrites that file only, never the directory"
+  local sb src out d
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; d="$sb/cwd/.claude/suites/fx"
+  mkdir -p "$d/agents"; printf 'SENTINEL\n' > "$d/agents/a.md"; printf 'MINE\n' > "$d/agents/user.md"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"
+  assert_contains "existing file untouched" "$(cat "$d/agents/a.md")" "SENTINEL"
+  assert_contains "skip is noted" "$out" "skip (exists)"
+  assert_exists "the missing sibling is still placed" "$d/agents/b.md"
+  out="$(fx_install "$sb" "$src" --harness claude-code --force)"
+  assert_contains "--force overwrites the file" "$(cat "$d/agents/a.md")" "agent a"
+  assert_contains "a user file in the same directory survives" "$(cat "$d/agents/user.md")" "MINE"
+}
+test_manifest_existing_file_skipped_and_force_never_removes_dir
+
+test_manifest_harness_omitted_warns_and_skips() {
+  _head "a harness the manifest omits is warned and skipped, never copied whole"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  out="$(fx_install "$sb" "$src" --harness copilot)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "notes the omission" "$out" "no placements for harness 'copilot'"
+  assert_missing "nothing placed" "$sb/cwd/.github/suites"
+  assert_missing "no hooks placed" "$sb/cwd/.github/hooks"
+}
+test_manifest_harness_omitted_warns_and_skips
+
+test_manifest_merge_rows_noted_and_skipped() {
+  _head "merge placements are noted and skipped; copy placements at the project root still land"
+  local sb src out
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"hooks","src":"copilot/.github/hooks","mode":"copy"},{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"},{"kind":"config","src":"copilot/Makefile","mode":"copy"},{"kind":"config","src":"copilot/scripts","mode":"merge"}]}')"
+  out="$(fx_install "$sb" "$src" --harness copilot)"
+  assert_exists "hook placed" "$sb/cwd/.github/hooks/h.json"
+  assert_exists "config relpath lands at the project root" "$sb/cwd/Makefile"
+  assert_missing "merge instructions not placed" "$sb/cwd/.github/copilot-instructions.md"
+  assert_missing "merge config not placed" "$sb/cwd/scripts/run.sh"
+  assert_contains "merge skip is noted" "$out" "merge mode not yet supported"
+}
+test_manifest_merge_rows_noted_and_skipped
+
+test_manifest_refuses_unsafe_src() {
+  _head "a manifest src that is absolute, has ./.. segments or escapes the suite is refused"
+  local sb src out code bad
+  for bad in '../x' '/etc' 'claude-code/../claude-code/agents' './claude-code' 'claude-code//agents' 'out'; do
+    sb="$(new_sandbox)"
+    src="$(manifest_fixture "$sb" "{\"claude-code\":[{\"kind\":\"agents\",\"src\":\"$bad\",\"mode\":\"copy\"}]}")"
+    mkdir -p "$sb/outside"; ln -s "$sb/outside" "$src/suites/fx/out"
+    out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+    assert_exit "src '$bad': exits 1" 1 "$code"
+    assert_contains "src '$bad': names the manifest problem" "$out" "manifest"
+    assert_missing "src '$bad': nothing placed" "$sb/cwd/.claude/suites"
+  done
+}
+test_manifest_refuses_unsafe_src
+
+test_manifest_refuses_dest_outside_root() {
+  _head "a computed destination that escapes the project root is refused"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  sed -i.bak 's#\.claude/suites/{suite}/agents/{basename}#../{basename}#' "$src/scripts/harnesses.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "says why" "$out" "unsafe destination"
+  assert_missing "nothing escaped" "$sb/a.md"
+}
+test_manifest_refuses_dest_outside_root
+
+test_manifest_dry_run_writes_nothing() {
+  _head "--dry-run on a manifest suite lists the files and writes nothing"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  out="$(fx_install "$sb" "$src" --harness claude-code --dry-run)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "lists a planned file" "$out" ".claude/suites/fx/agents/a.md"
+  assert_missing "no .claude dir created" "$sb/cwd/.claude"
+}
+test_manifest_dry_run_writes_nothing
+
+test_manifest_suite_dependencies_resolve() {
+  _head "a manifest suite's dependencies.json is still honoured"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  mkdir -p "$src/skills/s1"; printf -- '---\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+  printf '["skills/s1"]' > "$src/suites/fx/dependencies.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code --yes-deps)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "dependency skill installed" "$sb/cwd/.claude/skills/s1/SKILL.md"
+}
+test_manifest_suite_dependencies_resolve
+
+# Review round 1 (R1-*): crash, fail-open, symlink, data-loss and guard-parity cases.
+test_manifest_config_outside_scope_root_recorded() {
+  _head "a config placement outside the scope root (fresh project, no .github/) is placed and recorded"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"config","src":"copilot/Makefile","mode":"copy"}]}')"
+  out="$(fx_install "$sb" "$src" --harness copilot)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "Makefile placed at the project root" "$sb/cwd/Makefile"
+  assert_record "record lists the Makefile, hash matches" "$sb/cwd/.github/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 1
+}
+test_manifest_config_outside_scope_root_recorded
+
+test_manifest_bad_resourcekinds_fails_closed() {
+  _head "a placement crash refuses the install instead of falling back to the whole-directory copy"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["claude-code"]["resourceKinds"]["project"]["agents"]=5; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "says placement failed" "$out" "manifest placement failed"
+  assert_missing "nothing placed (no wholesale copy)" "$sb/cwd/.claude/suites/fx"
+}
+test_manifest_bad_resourcekinds_fails_closed
+
+test_manifest_refuses_symlinked_child() {
+  _head "a symlinked immediate child of an agents src is refused (dir link and file link)"
+  local sb src out code kind
+  for kind in dir file; do
+    sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+    if [[ $kind == dir ]]; then
+      mkdir -p "$sb/outside"; printf 'KEY\n' > "$sb/outside/id_rsa"; ln -s "$sb/outside" "$src/suites/fx/claude-code/agents/evil"
+    else
+      ln -s a.md "$src/suites/fx/claude-code/agents/evil.md"
+    fi
+    out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+    assert_exit "$kind link: exits 1" 1 "$code"
+    assert_contains "$kind link: says symlink" "$out" "symlink"
+    assert_missing "$kind link: nothing placed" "$sb/cwd/.claude/suites/fx"
+  done
+  # a link nested below a placed directory
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  mkdir -p "$sb/outside"; ln -s "$sb/outside" "$src/suites/fx/claude-code/.claude-plugin/l"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "nested link: exits 1" 1 "$code"
+  assert_missing "nested link: nothing placed" "$sb/cwd/.claude/suites/fx"
+}
+test_manifest_refuses_symlinked_child
+
+test_manifest_tab_in_src_cannot_shift_columns() {
+  _head "a tab in a manifest src is refused; it cannot turn a copy row into an rm -rf of the user's tree"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" "$(printf '{"copilot":[{"kind":"instructions","src":"copilot/notes\\tdocs","mode":"copy"}]}')")"
+  printf 'x\n' > "$src/suites/fx/$(printf 'copilot/notes\tdocs')"
+  mkdir -p "$sb/cwd/docs"; printf 'MINE\n' > "$sb/cwd/docs/user-file"
+  out="$(fx_install "$sb" "$src" --harness copilot --force)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "the user's docs/ survives" "$(cat "$sb/cwd/docs/user-file")" "MINE"
+}
+test_manifest_tab_in_src_cannot_shift_columns
+
+test_manifest_refuses_dest_text_rule() {
+  _head "dest text rule matches the record consumer: ~/ only for user scope, no '..' segment anywhere"
+  local sb src out code tmpl
+  for tmpl in '~/.bashrc.d/{basename}' '.claude/../x/{basename}' '~backup/{basename}'; do
+    sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["claude-code"]["resourceKinds"]["project"]["agents"]=sys.argv[2]; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json" "$tmpl"
+    out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+    assert_exit "project template '$tmpl': exits 1" 1 "$code"
+    assert_contains "project template '$tmpl': says why" "$out" "unsafe destination"
+    assert_missing "project template '$tmpl': nothing in HOME" "$sb/home/.bashrc.d"
+  done
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["claude-code"]["resourceKinds"]["user"]["agents"]="agents/{basename}"; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code --scope user)"; code=$?
+  assert_exit "user template without ~/: exits 1" 1 "$code"
+  assert_missing "user template without ~/: nothing written to the project" "$sb/cwd/agents"
+}
+test_manifest_refuses_dest_text_rule
+
+test_manifest_requested_suite_without_mapping() {
+  _head "a harness with resourceKinds but no mapping.suites still places a requested manifest suite"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"h2":[{"kind":"agents","src":"claude-code/agents","mode":"copy"}]}')"
+  printf '{"h2":{"label":"H2","scopes":{"project":".h2"},"mapping":{"skills":"skills/{name}"},"resourceKinds":{"project":{"agents":".h2/agents/{basename}"}}}}' > "$src/scripts/harnesses.json"
+  out="$(fx_install "$sb" "$src" --harness h2)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "manifest file placed" "$sb/cwd/.h2/agents/a.md"
+  assert_missing "no wholesale copy" "$sb/cwd/.h2/suites"
+}
+test_manifest_requested_suite_without_mapping
+
+test_manifest_dest_leaf_symlink_or_dir_skipped_even_with_force() {
+  _head "a destination leaf that is a symlink or a directory is skipped even with --force"
+  local sb src out d
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; d="$sb/cwd/.claude/suites/fx/agents"
+  mkdir -p "$d/b.md/keep"; printf 'TARGET\n' > "$sb/target"; ln -s "$sb/target" "$d/a.md"
+  out="$(fx_install "$sb" "$src" --harness claude-code --force)"
+  assert_contains "symlink target unchanged" "$(cat "$sb/target")" "TARGET"
+  [[ -L "$d/a.md" ]] && _ok "the link is still a link" || _fail "the link is still a link"
+  assert_exists "directory dest not removed" "$d/b.md/keep"
+  assert_contains "says not a regular file" "$out" "not a regular file"
+  out="$(fx_install "$sb" "$src" --harness claude-code --force --dry-run | grep 'agents/b.md')"
+  assert_not_contains "dry run does not promise --force will replace a directory" "$out" "use --force"
+}
+test_manifest_dest_leaf_symlink_or_dir_skipped_even_with_force
+
+test_manifest_parent_is_file_skips_not_aborts() {
+  _head "a regular file in the way of a destination parent skips that file, not the whole install"
+  local sb src out code d
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; d="$sb/cwd/.claude/suites/fx"
+  mkdir -p "$d"; printf 'x\n' > "$d/agents"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "says why" "$out" "parent is not a directory"
+  assert_exists "other placements still land" "$d/.claude-plugin/plugin.json"
+}
+test_manifest_parent_is_file_skips_not_aborts
+
+test_manifest_unwritable_parent_fails_closed() {
+  _head "an unwritable destination parent fails the install; it is not reported as 'parent is not a directory'"
+  local sb src out code rec
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block mkdir"; return; fi
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/.claude/suites"; chmod 555 "$sb/cwd/.claude/suites"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  chmod -R u+w "$sb/cwd/.claude"
+  assert_exit "exits 1" 1 "$code"
+  assert_not_contains "not mislabelled as a non-directory parent" "$out" "parent is not a directory"
+  assert_missing "nothing placed" "$sb/cwd/.claude/suites/fx"
+  assert_missing "nothing recorded" "$rec"
+}
+test_manifest_unwritable_parent_fails_closed
+
+test_manifest_dry_run_merge_row_over_existing_file() {
+  _head "a dry-run merge row over an existing file says merge is unsupported, not 'use --force'"
+  local sb src out
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"}]}')"
+  mkdir -p "$sb/cwd/.github"; printf 'MINE\n' > "$sb/cwd/.github/copilot-instructions.md"
+  out="$(fx_install "$sb" "$src" --harness copilot --dry-run)"
+  assert_contains "says merge is not supported" "$out" "merge mode not yet supported"
+  assert_not_contains "does not promise --force" "$out" "use --force"
+}
+test_manifest_dry_run_merge_row_over_existing_file
+
+test_manifest_empty_placement_list_is_a_skip() {
+  _head "a manifest that keys the harness with no placements is noted, not silently dropped"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" '{"claude-code":[]}')"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "notes the skip" "$out" "manifest has no placements for harness 'claude-code' — skipped"
+  assert_missing "nothing placed" "$sb/cwd/.claude/suites/fx"
+}
+test_manifest_empty_placement_list_is_a_skip
+
+test_manifest_instructions_needs_file_src() {
+  _head "an instructions placement with a directory src is refused"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"instructions","src":"copilot/scripts","mode":"copy"}]}')"
+  out="$(fx_install "$sb" "$src" --harness copilot)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_missing "nothing placed" "$sb/cwd/.github/copilot-instructions.md"
+}
+test_manifest_instructions_needs_file_src
+
+test_manifest_dependency_messages_once_per_asset() {
+  _head "a manifest suite is named once, not once per file, in dependency messages"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
+  mkdir -p "$src/skills/s1"; printf -- '---\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+  printf '["suites/fx"]' > "$src/skills/s1/dependencies.json"
+  out="$(fx_install "$sb" "$src" --harness claude-code --assets skills --no-deps)"
+  assert_contains "names the suite" "$out" "suites/fx"
+  assert_not_contains "suite listed once, not once per file" "$out" "suites/fx suites/fx"
+}
+test_manifest_dependency_messages_once_per_asset
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"
