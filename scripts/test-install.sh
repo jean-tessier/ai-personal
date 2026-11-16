@@ -1632,6 +1632,32 @@ test_uninstall_file_shared_by_two_uninstalled_assets() {
   assert_missing "one kept as modified: the other asset is removed" "$d/plan-dag"
 }
 
+test_uninstall_compares_files_not_spellings() {
+  _head "--uninstall compares files, not path spellings (case-insensitive file systems)"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  if [[ ! -e "$sb/cwd/.CLAUDE" ]]; then _skip "case-sensitive file system"; return; fi
+  rec_edit "$rec" 'a=d["assets"]; a["skills/atomic-commits"]["files"][".CLAUDE/.ai-personal-install.json"]="sha256:0"; a["suites/x"]={"files":{".CLAUDE/skills/plan-dag/SKILL.md":a["skills/plan-dag"]["files"][".claude/skills/plan-dag/SKILL.md"]}}'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --assets skills --force </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_not_contains "the record under another spelling is not deleted" "$out" "removed .CLAUDE/.ai-personal-install.json"
+  assert_exists "a staying asset's claim under another spelling protects the file" "$d/plan-dag/SKILL.md"
+}
+
+test_uninstall_prune_stops_at_symlinked_dir() {
+  _head "--uninstall prunes along the recorded path and stops at a symlinked directory"
+  local sb out code
+  sb="$(new_sandbox)"
+  mkdir -p "$sb/cwd/dotfiles/claude-skills" "$sb/cwd/.claude"; ln -s ../dotfiles/claude-skills "$sb/cwd/.claude/skills"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "every installed file removed" 0 "$(count_files "$sb/cwd/dotfiles")"
+  [[ -L "$sb/cwd/.claude/skills" && -d "$sb/cwd/.claude/skills" ]] \
+    && _ok "the symlinked dir and its target stay" || _fail "the symlinked dir and its target stay"
+}
+
 test_uninstall_unlinks_symlink_without_following() {
   _head "--uninstall unlinks a symlink in the way, never its target"
   local sb out code f
@@ -1693,6 +1719,8 @@ test_uninstall_path_guards_abort_before_deleting
 test_uninstall_refuses_bad_or_missing_record
 test_uninstall_keeps_shared_record_and_scope_root
 test_uninstall_file_shared_by_two_uninstalled_assets
+test_uninstall_compares_files_not_spellings
+test_uninstall_prune_stops_at_symlinked_dir
 test_uninstall_unlinks_symlink_without_following
 test_uninstall_dry_run_and_flag_conflicts
 test_uninstall_failed_delete_keeps_record_honest

@@ -340,6 +340,13 @@ elif mode == "uninstall":
                 sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
             paths[k] = os.path.join(base, t)
     sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]
+    def ident(q):  # compare files, not spellings (case-insensitive file systems, links)
+        try:
+            st = os.stat(q)
+            return (st.st_dev, st.st_ino)
+        except OSError:
+            return None
+    own, stops = {ident(path), ident(root)}, {ident(root), ident(base), ident(cwd), ident(home)} - {None}
     def sha(p):
         try:
             with open(p, "rb") as fh:
@@ -355,7 +362,7 @@ elif mode == "uninstall":
                 st = os.lstat(p)  # guard 4: look before touching
             except (FileNotFoundError, NotADirectoryError):
                 continue  # already gone: forgotten
-            if real(p) in (real(path), root):
+            if ident(p) in own:
                 print(f"  skip    {k} (the install record or the scope root)")
             elif not (stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)):
                 print(f"  skip    {k} (not a file)")
@@ -368,12 +375,12 @@ elif mode == "uninstall":
         if not mod or force:
             plan[a] = dele
     # guard 5: a path of any asset that stays (not selected, or kept as modified) is never deleted
-    claimed = {real(paths[k]) for a, e in rec["assets"].items() if a not in plan for k in e["files"]}
+    claimed = {ident(paths[k]) for a, e in rec["assets"].items() if a not in plan for k in e["files"]} - {None}
     failed = False
     for a, dele in plan.items():
         left = {}
         for k, p in dele:
-            if real(p) in claimed:
+            if ident(p) in claimed:
                 print(f"  skip    {k} (also claimed by an asset that stays)")
                 continue
             if dry:
@@ -393,9 +400,11 @@ elif mode == "uninstall":
             rec["assets"][a]["files"] = left
         else:
             del rec["assets"][a]
-        for k, p in dele:  # guard 8: prune empty dirs bottom-up, stopping at the scope root, project root, $HOME
-            d = real(os.path.dirname(p))
-            while d not in (root, bb, real(cwd), real(home)) and d.startswith(bb + os.sep):
+        # guard 8: prune empty dirs bottom-up along the recorded path, stopping at a symlinked
+        # dir, the scope root, the project root or $HOME
+        for k, p in dele:
+            d = os.path.dirname(p)
+            while d.startswith(base + os.sep) and not os.path.islink(d) and ident(d) not in stops:
                 try:
                     os.rmdir(d)  # only ever removes an empty directory
                 except OSError:
