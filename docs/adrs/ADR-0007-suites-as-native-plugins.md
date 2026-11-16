@@ -11,7 +11,9 @@ status: accepted
 
 Accepted
 
-Dependency half superseded by ADR-0009.
+Dependency half superseded by ADR-0009. The gate that decides when the Copilot translation runs
+(a hardcoded harness check in `install.sh`) is superseded by [ADR-0011](ADR-0011-translate-transforms-as-harness-data.md),
+which moves it into `harnesses.json` as `translate` data; the translation itself is unchanged.
 
 ## Context
 

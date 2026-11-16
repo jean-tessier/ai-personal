@@ -35,12 +35,6 @@ _fail() { printf "${RED}  FAIL${NC}  %s\n" "$1" >&2; }
 _warn() { printf "${YLW}  note${NC}  %s\n" "$1"; }
 _head() { printf "\n${BLD}── %s ──${NC}\n" "$1"; }
 
-# True for the one (harness, category) pair install.sh currently knows how to
-# translate a plugin-shaped item for post-copy (see translate_to_copilot()).
-# Only plan_item() asks: it applies the plugin-shaped eligibility filter and
-# stamps the resulting row's transform, which apply_selection() just follows.
-is_copilot_suite_category() { [[ "$HARNESS" == "copilot" && "$1" == "suites" ]]; }
-
 command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/harness JSON"; exit 1; }
 
 usage() {
@@ -127,6 +121,15 @@ elif mode == "mapping":
     if tmpl is None:
         sys.exit(1)
     print(tmpl)
+
+elif mode == "translate":
+    harnesses = load(os.environ["HARNESSES_JSON"])
+    tr = harnesses.get(args[0], {}).get("translate") or {}
+    if isinstance(tr, dict) and args[1] not in tr:
+        sys.exit(1)
+    # a null or non-string value reaches plan_item's unknown-transform branch (fail closed)
+    t = tr.get(args[1]) if isinstance(tr, dict) else None
+    print(t if isinstance(t, str) else "(invalid)")
 
 elif mode == "categories":
     catalog = load(os.environ["CATALOG_JSON"])
@@ -308,7 +311,7 @@ _read_loop_pick() {
 
 # ── Plan one item ───────────────────────────────────────────────────────────
 # The single place that decides whether an asset can go to $HARNESS/$SCOPE and
-# where: category mapping lookup, Copilot plugin-shaped eligibility, destination
+# where: category mapping lookup, translate-transform eligibility, destination
 # and post-copy transform. Both select_assets() (requested items) and
 # resolve_dependencies() (dependencies) call it, so they can't drift apart.
 #
@@ -332,17 +335,21 @@ plan_item() {
     _warn "$label has no mapping for harness '$HARNESS' — skipped"
     return 1
   fi
-  # Copilot only understands the plugin-shaped suites install.sh knows how to
-  # translate (see translate_to_copilot()) — a suite without a
-  # .claude-plugin/plugin.json at its root (a drop-in Copilot payload, or a
-  # multi-harness suite that ships its own hand-authored Copilot variant
-  # already) has no Copilot form for install.sh to place here.
-  if is_copilot_suite_category "$category"; then
-    if ! _json suite_plugin_shaped "$name"; then
-      _warn "$label is not plugin-shaped — no Copilot translation available, skipped"
-      return 1
-    fi
-    transform=copilot-plugin
+  # A harness may name a post-copy transform for a category (harnesses.json
+  # "translate"). An item the transform can't handle has no form for this
+  # harness and is skipped: e.g. Copilot only understands plugin-shaped suites
+  # (see translate_to_copilot()), so a drop-in payload or a multi-harness suite
+  # with its own hand-authored Copilot variant is not placed.
+  if transform=$(_json translate "$HARNESS" "$category"); then
+    local rc=0
+    transform_eligible "$transform" "$name" || rc=$?
+    case $rc in
+      0) ;;
+      1) _warn "$label is not plugin-shaped — no '$transform' translation available, skipped"; return 1 ;;
+      *) _warn "$label: unknown translate transform '$transform' — skipped"; return 1 ;;
+    esac
+  else
+    transform="-"
   fi
   printf '%s\t%s\t%s\t%s\t%s\n' "$asset" "$asset" "${SCOPE_ROOT:+$SCOPE_ROOT/}${template//"{name}"/$name}" item "$transform" >> "$out"
 }
@@ -402,6 +409,24 @@ select_assets() {
   done
 }
 
+# ── Transform registry ──────────────────────────────────────────────────────
+# Keyed by transform name (harnesses.json "translate"), never by harness name.
+# A new harness that reuses a transform is a JSON edit; a new kind of transform
+# needs a case here and in validate.sh's known-transform list (ADR-0011).
+# transform_eligible <transform> <name>: 0 eligible, 1 not eligible, 2 unknown transform.
+transform_eligible() {
+  case "$1" in
+    copilot-plugin) _json suite_plugin_shaped "$2" ;;
+    *) return 2 ;;
+  esac
+}
+# transform_apply <transform> <dest>: rewrite the freshly-copied item at <dest>.
+transform_apply() {
+  case "$1" in
+    copilot-plugin) translate_to_copilot "$2" ;;
+  esac
+}
+
 # ── Copilot translation ──────────────────────────────────────────────────────
 # Mutates a freshly-copied, plugin-shaped suite directory in place so it matches
 # GitHub Copilot/VS Code's native agent-plugin layout instead of Claude Code's:
@@ -410,8 +435,9 @@ select_assets() {
 #     dependencies/skills — are unchanged, since both ecosystems share them).
 #   - agents/*.md -> agents/*.agent.md (Copilot's own filename convention,
 #     already used by this repo's hand-authored Copilot payloads).
-# plan_item() only ever routes pluginShaped suites here for the copilot
-# harness, whether requested or pulled in as a dependency — drop-in Copilot
+# plan_item() only ever routes pluginShaped suites here (via transform_apply)
+# for a harness whose `translate` names copilot-plugin, whether requested or
+# pulled in as a dependency — drop-in Copilot
 # payloads (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
 # function: they have no plugin form, so plan_item() skips them with a note.
 translate_to_copilot() {
@@ -532,7 +558,7 @@ apply_selection() {
 
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
-      [[ "$transform" != "-" ]] && note="  (copilot-translated)"
+      [[ "$transform" != "-" ]] && note="  (translated: $transform)"
       if [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
@@ -550,8 +576,8 @@ apply_selection() {
     mkdir -p "$(dirname "$dest")"
     rm -rf "$dest"
     cp -R "$src" "$dest"
-    if [[ "$transform" == "copilot-plugin" ]]; then
-      translate_to_copilot "$dest"
+    if [[ "$transform" != "-" ]]; then
+      transform_apply "$transform" "$dest"
     fi
     _ok "${dest_spec#"$SCOPE_ROOT"/}"
   done < "$SELECTION_FILE"

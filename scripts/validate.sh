@@ -295,9 +295,14 @@ import json, re, sys
 
 KINDS = {"agents", "skills", "instructions", "hooks", "config"}
 PLACEHOLDERS = {"suite", "basename", "relpath"}
+TRANSFORMS = {"copilot-plugin": {"suites"}}  # transform -> categories it applies to; keep in sync with install.sh's transform_eligible/transform_apply
 for name, h in sorted(json.load(open(sys.argv[1])).items()):
     for k in h.get("mapping") or {}:
         if k not in ("skills", "suites"): print(f"{name}.mapping — unknown category '{k}'")
+    for k, t in (h.get("translate") or {}).items():
+        if k not in (h.get("mapping") or {}): print(f"{name}.translate — category '{k}' not in mapping")
+        if t not in TRANSFORMS: print(f"{name}.translate.{k} — unknown transform '{t}'")
+        elif k not in TRANSFORMS[t]: print(f"{name}.translate.{k} — transform '{t}' does not apply to category '{k}'")
     scopes = h.get("scopes") or {}
     for scope, kinds in (h.get("resourceKinds") or {}).items():
         if scope not in scopes: print(f"{name}.resourceKinds — scope '{scope}' not in scopes")
@@ -312,7 +317,7 @@ PY
         ((lint_errs++)) || true
         _fail "harnesses.$msg"
       done < <({ python3 -c "$lint_py" "$harnesses_file" || echo "json — vocabulary lint crashed (python traceback above)"; } | tr -d '\r')
-      [[ $lint_errs -eq 0 ]] && _ok "harnesses mapping/resourceKinds vocabulary"
+      [[ $lint_errs -eq 0 ]] && _ok "harnesses mapping/translate/resourceKinds vocabulary"
     else
       _warn "python3 not found; skipping per-harness structural checks"
     fi

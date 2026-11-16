@@ -29,6 +29,9 @@
       "skills": "skills/{name}",
       "suites": "suites/{name}"
     },
+    "translate": {
+      "suites": "copilot-plugin"
+    },
     "resourceKinds": {
       "project": {
         "agents": ".github/agents/{basename}",
