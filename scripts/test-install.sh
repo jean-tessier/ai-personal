@@ -508,6 +508,22 @@ test_ref_rejects_bad_values() {
     assert_contains "bad ref '$ref' names --ref" "$out" "--ref"
     assert_missing "bad ref '$ref' never calls curl" "$sb/curl.args"
   done
+  # a value flag with no value must fail, not exit 0 (bash 3.2 reports the EXIT trap's status)
+  local args
+  for args in '--ref' '--ref --dry-run'; do
+    sb="$(new_sandbox)"
+    stub_curl "$sb"
+    # shellcheck disable=SC2086
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --harness claude-code --scope project $args 2>&1 )"; code=$?
+    assert_exit "'$args' exits 1" 1 "$code"
+    assert_contains "'$args' says --ref needs a value" "$out" "--ref needs a value"
+    assert_missing "'$args' never calls curl" "$sb/curl.args"
+  done
+  sb="$(new_sandbox)"
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --scope project --harness 2>&1 )"; code=$?
+  assert_exit "--harness with no value exits 1" 1 "$code"
+  assert_contains "--harness says it needs a value" "$out" "--harness needs a value"
 }
 
 test_ref_with_local_fails() {

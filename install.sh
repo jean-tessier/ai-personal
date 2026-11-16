@@ -12,6 +12,7 @@
 #   --assets <a,b,...>  comma-separated asset categories (default: all available;
 #                       interactively pick per category if omitted and a TTY
 #                       is attached — via fzf, gum, or a numbered prompt)
+#   --ref <ref>         tag, branch, or commit sha to fetch (default: main)
 #   --dry-run           print planned copy operations; write nothing
 #   --force             overwrite existing destination files/dirs (default: skip)
 #   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
@@ -166,6 +167,11 @@ PY
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
+    # a missing value must fail here: under set -u, bash 3.2 would exit with the EXIT trap's status (0)
+    case "$1" in
+      --assets|--harness|--scope|--ref|--local)
+        if [[ $# -lt 2 || "$2" == -* ]]; then _fail "$1 needs a value"; usage; exit 1; fi ;;
+    esac
     case "$1" in
       --assets)  ASSETS_RAW="$2"; shift 2 ;;
       --harness) HARNESS="$2"; shift 2 ;;

@@ -78,8 +78,8 @@ To re-run a full real-network fetch test (not just `--local`): package the worki
 is bsdtar's sed-style rename flag, available on stock macOS `tar`), serve it with `python3 -m
 http.server` from a scratch directory, and temporarily point `fetch_source()`'s `url=` at
 `http://127.0.0.1:<port>/...` — revert before finishing, never land a URL override as a permanent
-flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's decision against a
-`--ref` flag).
+flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's decision, since narrowed:
+the `--ref` flag was later added, see the 2026-11-15 update).
 
 ## macOS bash/awk gotchas discovered building this script
 
