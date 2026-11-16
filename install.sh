@@ -87,6 +87,35 @@ def load(path):
     with open(path) as f:
         return json.load(f)
 
+# The one install-record validator (ADR-0012), shared by install and uninstall.
+def load_record(path, harness, scope):
+    def bad(why):
+        sys.exit(f"install record {path}: {why}")
+    try:
+        rec = load(path)
+    except (ValueError, OSError) as e:
+        bad(f"not valid JSON ({e})")
+    if not isinstance(rec, dict) or rec.get("version") != 1:
+        bad("not a version-1 install record")
+    if not isinstance(rec.get("assets"), dict) or not all(
+            isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
+        bad("malformed assets")
+    if (rec.get("harness"), rec.get("scope")) != (harness, scope):
+        sys.exit(f"install record {path} belongs to {rec.get('harness')}/{rec.get('scope')}, not {harness}/{scope}")
+    return rec
+
+# Safe record write: fresh temp file (a planted symlink is unlinked, never followed), then rename.
+def save_record(path, rec):
+    tmp = path + ".tmp"
+    try:
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    with open(tmp, "x") as f:
+        json.dump(rec, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+
 def find_item(catalog, category, name):
     for it in catalog.get("assets", {}).get(category, []):
         if it["name"] == name:
@@ -246,21 +275,9 @@ elif mode == "placements":
 elif mode == "record":
     import datetime, hashlib
     path, harness, scope, repo, ref, tsv, cwd, home = args
-    def bad(why):
-        sys.exit(f"install record {path}: {why}")
     rec = {"version": 1, "harness": harness, "scope": scope, "assets": {}}
     if os.path.exists(path):
-        try:
-            rec = load(path)
-        except (ValueError, OSError) as e:
-            bad(f"not valid JSON ({e})")
-        if not isinstance(rec, dict) or rec.get("version") != 1:
-            bad("not a version-1 install record")
-        if not isinstance(rec.get("assets"), dict) or not all(
-                isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
-            bad("malformed assets")
-        if (rec.get("harness"), rec.get("scope")) != (harness, scope):
-            sys.exit(f"install record {path} belongs to {rec.get('harness')}/{rec.get('scope')}, not {harness}/{scope}")
+        rec = load_record(path, harness, scope)
     with open(tsv) as f:
         rows = [line.rstrip("\n").split("\t") for line in f]
     if rows:
@@ -281,15 +298,7 @@ elif mode == "record":
                 with open(file, "rb") as fh:
                     entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        tmp = path + ".tmp"
-        try:
-            os.unlink(tmp)  # a planted symlink here must not be followed
-        except FileNotFoundError:
-            pass
-        with open(tmp, "x") as f:
-            json.dump(rec, f, indent=2, sort_keys=True)
-            f.write("\n")
-        os.replace(tmp, path)
+        save_record(path, rec)
 
 else:
     sys.exit(f"unknown mode: {mode}")
