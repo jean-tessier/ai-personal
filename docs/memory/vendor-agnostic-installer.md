@@ -24,7 +24,7 @@ its design.
 | Installer entrypoint | `install.sh` (repo root, not `scripts/`) |
 | Harness manifest | `scripts/harnesses.json` — one entry per harness: `label`, `scopes` (scope key → root path), `mapping` (asset category → destination template) |
 | Dependency manifest | `{category}/{name}/dependencies.json` — colocated, one file per asset, optional; flat JSON array of repo-relative paths (e.g. `["skills/create-adr", "skills/yaml-frontmatter"]`); absent means no dependencies. See [ADR-0009](../adrs/ADR-0009-colocated-dependency-manifest.md). |
-| Suite manifest placements | `suites/{name}/manifest.json` ([ADR-0008](../adrs/ADR-0008-suite-manifest-resource-kind-placements.md)), expanded by `plan_item()` via `_json placements`; `copy` placements are per file and never remove a directory, `merge` rows create missing files and leave existing ones untouched (listed once at the end; `--force` overwrites per file), see [ADR-0013](../adrs/ADR-0013-merge-and-per-file-placement.md); no suite has a manifest yet |
+| Suite manifest placements | `suites/{name}/manifest.json` ([ADR-0008](../adrs/ADR-0008-suite-manifest-resource-kind-placements.md)), expanded by `plan_item()` via `_json placements`; `copy` placements are per file and never remove a directory, `merge` rows create missing files and leave existing ones untouched (listed once at the end; `--force` overwrites per file), see [ADR-0013](../adrs/ADR-0013-merge-and-per-file-placement.md); `suites/tier-layered-teams` is the first (and so far only) suite with a manifest (migrated 2026-11-16), so it installs per file on both harnesses and its suite-root docs are never installed |
 | User docs | `README.md`'s `## Installing` section |
 | Structural lint | `scripts/validate.sh`'s `── harnesses ──` section |
 
@@ -156,8 +156,9 @@ followed from that:
   instead of category granularity. Eligible suites get mechanically rewritten by
   `translate_to_copilot()`: `agents/*.md` → `agents/*.agent.md`, and
   `.claude-plugin/plugin.json` relocated to a root `plugin.json`. `tiered-escalation-suite`
-  and `tier-layered-teams/copilot/` are drop-in payloads, not plugin-shaped, and stay
-  permanently unreachable through this path — unchanged from before this decision.
+  is a drop-in payload, not plugin-shaped, and stays unreachable through this path.
+  (`tier-layered-teams` was in the same position until 2026-11-16, when its `manifest.json`
+  made it installable per file on both harnesses instead; manifest wins over translation.)
 
 **Windows gotcha found while verifying this**: a native Windows `python3.exe` (as opposed
 to WSL or a Unix `python3`) writes `\r\n` to stdout even when piped, which corrupts every

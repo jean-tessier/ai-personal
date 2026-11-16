@@ -19,10 +19,35 @@ suite's root docs as the vendor-agnostic canonical source.
 - **Claude Code variant**: dispatch
   [`claude-code/agents/01-core-orchestrator.md`](claude-code/agents/01-core-orchestrator.md)
   with the goal — the Opus-tier hub that plans, decomposes, and routes to the three team leads.
-- **Copilot variant**: deploy the [`copilot/`](copilot/) payload into the target repo (see
-  [USAGE.md](USAGE.md)); the routing contract is
+- **Copilot variant**: install the [`copilot/`](copilot/) payload into the target repo (see
+  Installing below); the routing contract is
   [`copilot/.github/copilot-instructions.md`](copilot/.github/copilot-instructions.md) —
   always-on rather than a live dispatch target.
+
+## Installing
+
+This suite installs through its [`manifest.json`](manifest.json)
+([ADR-0008](../../docs/adrs/ADR-0008-suite-manifest-resource-kind-placements.md)); only the
+chosen harness's variant is placed:
+
+```bash
+bash install.sh --harness claude-code --scope project --assets suites   # or --scope user
+bash install.sh --harness copilot --scope project --assets suites
+```
+
+- **claude-code** places `agents/` and `.claude-plugin/` under `.claude/suites/tier-layered-teams/`
+  (or `~/.claude/suites/...` for `--scope user`). No `copilot/` copy comes along.
+- **copilot** places the same 30 files `cp -R copilot/. <target>/` used to, at the target repo's root.
+  The agents, skills and hooks are created if missing and skipped if present. The `Makefile`,
+  `.gitignore`, `.vscode/`, `scripts/`, `scratch/` and `copilot-instructions.md` are `merge` rows:
+  created if missing, never overwritten, and listed once at the end so you can merge them by hand
+  (`--force` overwrites them).
+
+Known limitations: suite-root docs (`README.md`, `USAGE.md`, `PROTOCOL.md`) are never installed, so
+the two installed files that link it (`00-escalation-protocol.md` and `trigger-semantics/SKILL.md`)
+point at a file that is not there (both mirror its tables, so only the "Canonical source" link
+dangles; read the canonical [PROTOCOL.md](PROTOCOL.md) in this repo); and the copilot variant writes into the project root, not just `.github/`. See
+[USAGE.md](USAGE.md) for details and for upgrading from an older install.
 
 ## The pattern
 

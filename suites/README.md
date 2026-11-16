@@ -77,11 +77,22 @@ auto-include is separate: any suite or skill with a `dependencies.json` gets it
 ([ADR-0009](../docs/adrs/ADR-0009-colocated-dependency-manifest.md)).
 
 A suite that's a **drop-in payload** for a *different* target project — its own
-`.github/`, `.vscode/`, `Makefile`, and `scripts/*.sh` working together, deployed by
-hand — is not plugin-shaped and never will be; forcing that shape onto a payload's
-bespoke hook/build wiring would risk breaking it for a cosmetic format match. See
+`.github/`, `.vscode/`, `Makefile`, and `scripts/*.sh` working together — is not
+plugin-shaped and never will be; forcing that shape onto a payload's bespoke hook/build
+wiring would risk breaking it for a cosmetic format match. See
 [ADR-0007](../docs/adrs/ADR-0007-suites-as-native-plugins.md) for the full reasoning and
-which suites landed on which side.
+which suites landed on which side. A payload with no `manifest.json`
+(`tiered-escalation-suite`) is deployed by hand.
+
+A suite with several harness variants can instead carry a colocated **`manifest.json`**
+([ADR-0008](../docs/adrs/ADR-0008-suite-manifest-resource-kind-placements.md)) that lists, per
+harness, which variant subtrees to place (kind, `src`, `copy` or `merge` mode;
+[ADR-0013](../docs/adrs/ADR-0013-merge-and-per-file-placement.md) defines the per-file
+semantics). The manifest replaces both the whole-directory copy and the Copilot translation for
+every harness it keys, and a harness it omits is skipped with a notice. Suite-root docs are
+never installed. `tier-layered-teams` is the first suite migrated: `install.sh` places its
+`claude-code/` plugin or its `copilot/` payload, never both, and no longer needs a manual
+`cp -R`.
 
 ## Available suites
 
@@ -89,6 +100,6 @@ which suites landed on which side.
 |---|---|---|
 | [handoff-workflow](handoff-workflow/README.md) | Yes | Multi-session work loop: `handoff.md` carries state between sessions via `resume-handoff`/`handoff-document`, then `ingest-handoff` retires a completed handoff into ADRs, `docs/memory/`, and the handoff archive. Declares `create-adr`/`yaml-frontmatter` as dependencies. |
 | [hub-and-spoke-orchestration](hub-and-spoke-orchestration/README.md) | Yes | Multi-agent software-engineering pipeline: a central Orchestrator dispatches Planner/Explorer/Coder/Reviewer/Arbiter/Executor spokes and a Scribe write-path service against one shared protocol. |
-| [tier-layered-teams](tier-layered-teams/README.md) | `claude-code/` only | A two-axis orchestration lattice crossing model-cost team tiers (Opus-tier orchestrator, Sonnet-tier leads, Haiku-tier workers) with T0–T3 tool escalation, shipped as Claude Code- and Copilot-native variants. Its `copilot/` variant is a hand-authored drop-in payload, not plugin-translated. |
+| [tier-layered-teams](tier-layered-teams/README.md) | `claude-code/` only | A two-axis orchestration lattice crossing model-cost team tiers (Opus-tier orchestrator, Sonnet-tier leads, Haiku-tier workers) with T0–T3 tool escalation, shipped as Claude Code- and Copilot-native variants. Manifest-driven: `install.sh` places the chosen harness's variant (the `copilot/` payload merges into the project root). |
 | [tiered-escalation-suite](tiered-escalation-suite/README.md) | No — drop-in payload | Capability-scoped GitHub Copilot/VS Code agent suite (Surveyor/Transformer peers + Verifier gate), a drop-in `.github/`/`.vscode`/`scripts`/`Makefile` payload for a *target* project, not read in place by Claude Code. |
 | [tiered-team-orchestration](tiered-team-orchestration/README.md) | Yes | A three-tier model-cost hierarchy — an Opus-tier core orchestrator plans and routes, Sonnet-tier research/coding/review team leads decompose and synthesize, Haiku-tier workers execute narrow tasks. |

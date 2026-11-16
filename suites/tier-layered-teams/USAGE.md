@@ -8,9 +8,10 @@ both variants.
 
 `claude-code/` carries its own [`.claude-plugin/plugin.json`](claude-code/.claude-plugin/plugin.json)
 and is listed in the repo-root `.claude-plugin/marketplace.json` as `tier-layered-teams` —
-`bash install.sh --harness claude-code --scope project --assets suites` installs it (its
-`copilot/` sibling is copied alongside as inert dead weight, per ADR-0006), or add this
-repo as a marketplace and `claude plugin install tier-layered-teams@ai-personal` directly.
+`bash install.sh --harness claude-code --scope project --assets suites` installs it through this
+suite's [`manifest.json`](manifest.json) (only `agents/` and `.claude-plugin/`, under
+`.claude/suites/tier-layered-teams/`; `--scope user` uses `~/.claude/suites/tier-layered-teams/`),
+or add this repo as a marketplace and `claude plugin install tier-layered-teams@ai-personal` directly.
 
 Role files under [`claude-code/agents/`](claude-code/agents/) map onto Claude Code
 subagent definitions the same way as in
@@ -38,20 +39,52 @@ tier it can self-escalate within (see the worked example below).
 
 ## Copilot variant
 
-There's no `install.sh` support for this specific directory — deliberate, matching the
-tiered-escalation-suite precedent. `copilot`'s `harnesses.json` mapping does support
-`suites` now (see [ADR-0007](../../docs/adrs/ADR-0007-suites-as-native-plugins.md)), but
-only for *plugin-shaped* suites (a root `.claude-plugin/plugin.json`); `copilot/` here is
-a hand-authored drop-in payload, not plugin-shaped, so `install.sh` still skips it with a
-one-line notice. Deploy by hand instead:
+`install.sh` places the payload through this suite's [`manifest.json`](manifest.json)
+([ADR-0008](../../docs/adrs/ADR-0008-suite-manifest-resource-kind-placements.md)), replacing the
+old manual `cp -R`:
 
 ```bash
-cp -R suites/tier-layered-teams/copilot/. <target-repo>/
+bash install.sh --harness copilot --scope project --assets suites
 ```
 
-The payload mirrors the target repo's root (`.github/` plus its supporting skills,
-hooks, scripts, `Makefile`, and `.vscode` config — see README's Components section).
-Merge instead of overwriting if the target repo already has any of these.
+It places the same 30 files `cp -R suites/tier-layered-teams/copilot/. <target-repo>/` would, byte
+for byte and with exec bits kept. The payload mirrors the target repo's root (`.github/` plus its
+supporting skills, hooks, scripts, `Makefile`, and `.vscode` config — see README's Components
+section), and each file is handled on its own ([ADR-0013](../../docs/adrs/ADR-0013-merge-and-per-file-placement.md)):
+
+- **Agents, skills and hooks** (`copy`): created if missing, skipped with a per-file note if they
+  already exist. `--force` overwrites that file.
+- **`copilot-instructions.md`, `.vscode/`, `Makefile`, `scripts/`, `.gitignore`, `scratch/`**
+  (`merge`): created if missing; an existing file is never touched and is listed once at the end
+  of the run so you can merge it by hand. `--force` overwrites those files too.
+- A directory is never removed, so your own extra files next to these survive.
+
+A second run is therefore a no-op for everything already there. `install.sh` never does
+format-aware merging (no JSON deep-merge, no `.gitignore` union).
+
+**Known limitations** (accepted when this suite was migrated to its manifest):
+
+- **Dangling `PROTOCOL.md` link.** Suite-root docs (`README.md`, `USAGE.md`, `PROTOCOL.md`) are never
+  installed. `00-escalation-protocol.md` (claude-code) and `trigger-semantics/SKILL.md` (copilot)
+  open with a "Canonical source" link to `PROTOCOL.md` that therefore points at nothing in the
+  installed tree. Both files mirror the protocol's tables, so only the link is broken; read the
+  canonical [`PROTOCOL.md`](PROTOCOL.md) in this repo when you need it.
+- **Copilot writes into the project root**, not only `.github/`: `Makefile`, `.gitignore`,
+  `scripts/`, `.vscode/` and `scratch/` all land there, because that is what the payload always
+  did. Check `git status` after installing, and use `--dry-run` first to see the file list.
+
+**Upgrading from an older install** (claude-code): installs before the manifest copied the whole
+suite directory and were never recorded, so `install.sh` cannot clean them up. After upgrading
+you will have two plugin roots. Delete the old one by hand:
+
+```bash
+rm -rf .claude/suites/tier-layered-teams/claude-code   # or ~/.claude/suites/... for --scope user
+```
+
+The old whole-directory install also left `README.md`, `USAGE.md`, `PROTOCOL.md` and `copilot/` in
+`.claude/suites/tier-layered-teams/`; delete those too if you do not want them. A copilot project
+that used the manual `cp -R` has nothing to clean up: the first manifest install leaves every file
+already there alone (per-file notes for agents, skills and hooks, one list for the merge files).
 
 **Moving targets** — Copilot tool ids, hook JSON shapes, the per-subagent `model` field,
 and preview flags are unverified/moving targets: confirm against current VS Code Copilot
