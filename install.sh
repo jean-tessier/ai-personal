@@ -62,6 +62,7 @@ FORCE=0
 YES_DEPS=0
 NO_DEPS=0
 REF_SET=0
+UNINSTALL=0
 LOCAL_PATH=""   # test seam: skip network fetch, use a local checkout instead
 
 WORK="$(mktemp -d)"
@@ -300,6 +301,105 @@ elif mode == "record":
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         save_record(path, rec)
 
+elif mode == "uninstall":
+    # The record is user-editable, so it is untrusted: every check runs before any delete.
+    import hashlib, stat
+    harness, scope, cwd, home, dry, force, cats = args
+    dry, force, cats, user = dry == "1", force == "1", cats.split(), scope == "user"
+    base = home if user else cwd
+    real = os.path.realpath
+    def entry(q):  # q's directory entry: real parent + own name (a final symlink is not followed)
+        return os.path.join(real(os.path.dirname(q)), os.path.basename(q))
+    def owner(q):
+        try:
+            r = load(q)
+            return (r.get("harness"), r.get("scope"))
+        except Exception:
+            return None
+    # ponytail: no fetch, so no harnesses.json: look for the record in the project root
+    # (or $HOME) and one level below, where every scope root sits today. A deeper scope
+    # root would need harnesses.json here.
+    found = sorted({entry(q) for d in [base] + [os.path.join(base, n) for n in os.listdir(base)]
+                    for q in [os.path.join(d, ".ai-personal-install.json")] if os.path.isfile(q)})
+    mine = [q for q in found if owner(q) == (harness, scope)] or found
+    if len(mine) != 1:
+        sys.exit(f"no install record for {harness}/{scope} under {base}" + (f" (found: {', '.join(mine)})" if mine else ""))
+    path = mine[0]
+    rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
+    root, bb = os.path.dirname(path), real(base)
+    # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
+    paths = {}
+    for a, e in rec["assets"].items():
+        for k in e["files"]:
+            t = k[2:] if user and k.startswith("~/") else None if user else k
+            if (t is None or not t or "\\" in t or os.path.isabs(t) or t.startswith("~")
+                    or any(s in ("", ".", "..") for s in t.split("/"))
+                    or not entry(os.path.join(base, t)).startswith(bb + os.sep)):
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
+            paths[k] = os.path.join(base, t)
+    sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]
+    claimed = {real(paths[k]) for a, e in rec["assets"].items() if a not in sel for k in e["files"]}
+    def sha(p):
+        try:
+            with open(p, "rb") as fh:
+                return "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+        except OSError:
+            return None
+    plan = {}
+    for a in sel:
+        dele, mod = [], []
+        for k, h in rec["assets"][a]["files"].items():
+            p = paths[k]
+            try:
+                st = os.lstat(p)  # guard 4: look before touching
+            except (FileNotFoundError, NotADirectoryError):
+                continue  # already gone: forgotten
+            if real(p) in (real(path), root):
+                print(f"  skip    {k} (the install record or the scope root)")
+            elif real(p) in claimed:  # guard 5
+                print(f"  skip    {k} (also claimed by an asset not being uninstalled)")
+            elif not (stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)):
+                print(f"  skip    {k} (not a file)")
+            else:
+                if stat.S_ISLNK(st.st_mode) or sha(p) != h:  # guard 6; a link is never ours, never read
+                    mod.append(k)
+                dele.append((k, p))
+        for k in mod:
+            print(f"  {'force' if force else 'keep'}    {a}, modified: {k}" + ("" if force else " (use --force to delete it)"))
+        if not mod or force:
+            plan[a] = dele
+    failed = False
+    for a, dele in plan.items():
+        left = {}
+        for k, p in dele:
+            if dry:
+                print(f"  [dry-run] would remove {k}")
+                continue
+            try:
+                os.unlink(p)  # never follows a symlink
+                print(f"  removed {k}")
+            except OSError as e:
+                print(f"  FAIL    could not remove {k}: {e.strerror}", file=sys.stderr)
+                left[k], failed = rec["assets"][a]["files"][k], True
+        if dry:
+            continue
+        if left:
+            rec["assets"][a]["files"] = left
+        else:
+            del rec["assets"][a]
+        for k, p in dele:  # guard 8: prune empty dirs bottom-up, stopping at the scope root, project root, $HOME
+            d = real(os.path.dirname(p))
+            while d not in (root, bb, real(cwd), real(home)) and d.startswith(bb + os.sep):
+                try:
+                    os.rmdir(d)  # only ever removes an empty directory
+                except OSError:
+                    break
+                d = os.path.dirname(d)
+    if not dry:  # guard 7: same safe write as install; an empty record is deleted
+        save_record(path, rec) if rec["assets"] else os.unlink(path)
+    if failed:
+        sys.exit("uninstall: some files could not be removed; they stay in the install record")
+
 else:
     sys.exit(f"unknown mode: {mode}")
 PY
@@ -322,6 +422,7 @@ parse_args() {
       --force)   FORCE=1; shift ;;
       --yes-deps) YES_DEPS=1; shift ;;
       --no-deps)  NO_DEPS=1; shift ;;
+      --uninstall) UNINSTALL=1; shift ;;
       --local)   LOCAL_PATH="$2"; shift 2 ;;  # undocumented test seam
       -h|--help) usage; exit 0 ;;
       *) _fail "unknown flag: $1"; usage; exit 1 ;;
@@ -334,6 +435,9 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
+  if [[ $UNINSTALL -eq 1 && ( $REF_SET -eq 1 || -n "$LOCAL_PATH" || $YES_DEPS -eq 1 || $NO_DEPS -eq 1 ) ]]; then
+    _fail "--ref, --local, --yes-deps and --no-deps cannot be combined with --uninstall"; usage; exit 1
+  fi
   if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
   if [[ $REF_SET -eq 1 ]]; then
     if [[ -n "$LOCAL_PATH" ]]; then _fail "--ref cannot be combined with --local"; usage; exit 1; fi
@@ -810,8 +914,19 @@ apply_selection() {
   [[ -z "$MERGE_KEPT" ]] || _warn "merge: left existing file(s) untouched (use --force to overwrite):$MERGE_KEPT"
 }
 
+# ── Uninstall (ADR-0012 "Consumers MUST") ───────────────────────────────────
+# Removes what the install record says this tool placed, after the record and
+# every path in it pass the checks in `_json uninstall`. Nothing is fetched.
+uninstall() {
+  local cats=""
+  if [[ -n "$ASSETS_RAW" ]]; then resolve_categories; cats="${CATEGORIES[*]}"; fi
+  _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run (uninstall)" || echo "uninstalling")"
+  _json uninstall "$HARNESS" "$SCOPE" "$PWD" "$HOME" "$DRY_RUN" "$FORCE" "$cats"
+}
+
 main() {
   parse_args "$@"
+  if [[ $UNINSTALL -eq 1 ]]; then uninstall; return; fi
   fetch_source
   build_catalog
   if [[ ! -f "$SRC/scripts/harnesses.json" ]]; then
