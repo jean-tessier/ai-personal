@@ -1553,7 +1553,7 @@ test_uninstall_path_guards_abort_before_deleting() {
   for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f' \
       $'.claude/a\e[2K' '.claude/a<NUL>b' '.claude/a<RLO>dm.LLIKS' '.git/HEAD' '.GIT/HEAD' 'glink/HEAD'; do
     cp "$sb/pristine.json" "$rec"
-    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0").replace("<RLO>","‮"):"sha256:0"}}' "$bad"
+    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0").replace("<RLO>","\u202e"):"sha256:0"}}' "$bad"
     out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
     assert_exit "path '$bad': exits 1" 1 "$code"
     assert_contains "path '$bad': says why" "$out" "unsafe path"
@@ -1583,7 +1583,8 @@ test_uninstall_path_guards_abort_before_deleting() {
   assert_exit "user scope, path outside the scope root: exits 1" 1 "$code"
   assert_contains "user scope, path outside the scope root: says why" "$out" "outside the scope root"
   assert_exit "user scope, path outside the scope root: nothing deleted" "$n" "$(count_files "$sb/home")"
-  # .GIT through a symlinked .git resolves elsewhere: only the case-insensitive text rule sees it
+  # .GIT through a symlinked .git: on a case-insensitive file system it resolves to gitdir/HEAD, so
+  # only the case-insensitive text rule sees it (on a case-sensitive one the resolved rule also does)
   sb="$(new_sandbox)"; mkdir -p "$sb/cwd/.claude" "$sb/cwd/gitdir"; printf 'ref\n' > "$sb/cwd/gitdir/HEAD"; ln -s gitdir "$sb/cwd/.git"
   printf '{"version":1,"harness":"claude-code","scope":"project","assets":{"skills/zz":{"files":{".GIT/HEAD":"sha256:0"}}}}' \
     > "$sb/cwd/.claude/.ai-personal-install.json"
