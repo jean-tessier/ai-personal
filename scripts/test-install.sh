@@ -363,6 +363,27 @@ test_copilot_skips_non_plugin_shaped_suite() {
     "$sb/cwd/.github/suites/tiered-escalation-suite"
 }
 
+test_copilot_dep_on_non_plugin_shaped_suite_skipped() {
+  _head "copilot harness skips a non-plugin-shaped suite pulled in as a dependency"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/fake-skill" "$src/suites/dropin-suite"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  cp "$REPO/scripts/harnesses.json" "$src/scripts/harnesses.json"
+  printf -- '---\ndescription: test\n---\n' > "$src/skills/fake-skill/SKILL.md"
+  printf '["suites/dropin-suite"]' > "$src/skills/fake-skill/dependencies.json"
+  printf 'drop-in\n' > "$src/suites/dropin-suite/README.md"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness copilot --scope project --assets skills --yes-deps ) 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "warns the dependency is not plugin-shaped" "$out" "dependency 'suites/dropin-suite' is not plugin-shaped"
+  assert_missing "drop-in suite dependency not copied into .github" \
+    "$sb/cwd/.github/suites/dropin-suite"
+  assert_exists "dependent skill still installed" "$sb/cwd/.github/skills/fake-skill"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -384,6 +405,7 @@ test_interactive_picker_fallback
 test_no_deps_flag_skips_dependencies
 test_copilot_suite_translation
 test_copilot_skips_non_plugin_shaped_suite
+test_copilot_dep_on_non_plugin_shaped_suite_skipped
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then

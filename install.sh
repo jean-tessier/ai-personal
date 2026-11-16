@@ -430,6 +430,11 @@ resolve_dependencies() {
         continue
       fi
       dep_name="${dep##*/}"
+      # Same eligibility rule select_assets() applies to a requested suite.
+      if is_copilot_suite_category "$dep_category" && ! _json suite_plugin_shaped "$dep_name"; then
+        _warn "dependency '$dep' is not plugin-shaped — no Copilot translation available, skipped"
+        continue
+      fi
       dest_rel="${template//"{name}"/$dep_name}"
       printf '%s\t%s\t%s\t%s\n' "$dep_category" "$dep_name" "$dep" "$dest_rel" >> "$resolvable_file"
     done < "$candidates_file"
