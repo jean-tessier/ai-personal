@@ -172,7 +172,7 @@ elif mode == "record":
     if os.path.exists(path):
         try:
             rec = load(path)
-        except ValueError as e:
+        except (ValueError, OSError) as e:
             bad(f"not valid JSON ({e})")
         if not isinstance(rec, dict) or rec.get("version") != 1:
             bad("not a version-1 install record")
@@ -200,10 +200,15 @@ elif mode == "record":
             for key, file in placed:
                 with open(file, "rb") as fh:
                     entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
-        with open(path + ".tmp", "w") as f:
+        tmp = path + ".tmp"
+        try:
+            os.unlink(tmp)  # a planted symlink here must not be followed
+        except FileNotFoundError:
+            pass
+        with open(tmp, "x") as f:
             json.dump(rec, f, indent=2, sort_keys=True)
             f.write("\n")
-        os.replace(path + ".tmp", path)
+        os.replace(tmp, path)
 
 else:
     sys.exit(f"unknown mode: {mode}")
@@ -586,16 +591,17 @@ resolve_root() {
 
 # ── Install record (ADR-0012) ───────────────────────────────────────────────
 # Every write path calls record_write, which logs the placed asset and merges it
-# into <scope root>/.ai-personal-install.json at once, so a later failure never
-# leaves placed files unrecorded. Dry runs never call it, so they write no record.
+# into <scope root>/.ai-personal-install.json at once, so every completed placement
+# is recorded even if a later one fails (a failed cp/transform leaves that asset's
+# partial copy unrecorded, the safe direction). Dry runs never call record_write.
 RECORD_TSV="$WORK/record.tsv"
 
-# record_flush [<rows_file>]: validate the record and merge the rows in (default: $RECORD_TSV).
+# record_flush: validate the record and merge the rows in $RECORD_TSV (none: validate only).
 record_flush() {
   local ref=""
   [[ -n "$LOCAL_PATH" ]] || ref="$REF"
   _json record "$(resolve_root "${SCOPE_ROOT:+$SCOPE_ROOT/}.ai-personal-install.json")" \
-    "$HARNESS" "$SCOPE" "$OWNER/$REPO_NAME" "$ref" "${1:-$RECORD_TSV}" "$PWD" "$HOME"
+    "$HARNESS" "$SCOPE" "$OWNER/$REPO_NAME" "$ref" "$RECORD_TSV" "$PWD" "$HOME"
 }
 
 # record_write <asset> <dest_spec>: log one placed file or directory, then flush.
@@ -614,7 +620,7 @@ apply_selection() {
   _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run" || echo "installing")"
   local asset src_rel dest_spec mode transform category src dest
   # a bad existing record must stop the install before any file is copied
-  [[ $DRY_RUN -eq 1 ]] || record_flush /dev/null
+  : > "$RECORD_TSV"; record_flush
   while IFS=$'\t' read -r asset src_rel dest_spec mode transform; do
     category="${asset%%/*}"
     src="$SRC/$src_rel"

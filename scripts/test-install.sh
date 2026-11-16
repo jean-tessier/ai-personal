@@ -701,7 +701,8 @@ test_record_covers_copilot_translation_and_dependencies() {
   local sb rec
   sb="$(new_sandbox)"; rec="$sb/cwd/.github/.ai-personal-install.json"
   run_install "$sb" --harness copilot --scope project --assets suites --yes-deps </dev/null >/dev/null 2>&1
-  assert_record "translated files hash as placed" "$rec" "$sb/cwd" "$sb/home" 0
+  assert_record "translated files hash as placed, every file on disk recorded" "$rec" "$sb/cwd" "$sb/home" 0 \
+    "$(cd "$sb/cwd" && find .github -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
   assert_contains "a translated plugin.json is recorded" "$(record_json "$rec" '[k for a in d["assets"].values() for k in a["files"] if k.endswith("/plugin.json")]')" "/plugin.json"
   assert_contains "a dependency is recorded as its own asset" "$(record_json "$rec" 'sorted(d["assets"])')" "'skills/"
 }
@@ -764,7 +765,8 @@ test_record_user_scope_root() {
   run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
   assert_exists "record under \$HOME/.claude" "$rec"
   assert_missing "cwd untouched" "$sb/cwd/.claude"
-  assert_record "paths are ~-anchored and match on disk" "$rec" "$sb/cwd" "$sb/home" 0
+  assert_record "paths are ~-anchored and match on disk, every file recorded" "$rec" "$sb/cwd" "$sb/home" 0 \
+    "$(cd "$sb/home" && find .claude -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
   assert_contains "keys start with ~/.claude/" "$(record_json "$rec" 'sorted(d["assets"]["skills/atomic-commits"]["files"])[0]')" "~/.claude/skills/"
 }
 
@@ -774,6 +776,9 @@ test_record_bad_record_stops_before_any_copy() {
   sb="$(new_sandbox)"
   mkdir -p "$sb/cwd/.claude"; printf '{"version":2,"assets":{}}' > "$sb/cwd/.claude/.ai-personal-install.json"
   cp "$sb/cwd/.claude/.ai-personal-install.json" "$sb/before.json"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets skills --dry-run </dev/null 2>&1)"; code=$?
+  assert_exit "unknown version, --dry-run: exits 1 like the real run" 1 "$code"
+  assert_missing "unknown version, --dry-run: no temp file" "$sb/cwd/.claude/.ai-personal-install.json.tmp"
   out="$(run_install "$sb" --harness claude-code --scope project --assets skills </dev/null 2>&1)"; code=$?
   assert_exit "unknown version: exits 1" 1 "$code"
   assert_contains "unknown version: says why" "$out" "install record"
@@ -789,6 +794,25 @@ test_record_bad_record_stops_before_any_copy() {
     assert_not_contains "record '$bad': no traceback" "$out" "Traceback"
     assert_missing "record '$bad': nothing placed" "$sb/cwd/.claude/skills"
   done
+  sb="$(new_sandbox)"
+  mkdir -p "$sb/cwd/.claude/.ai-personal-install.json"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets skills </dev/null 2>&1)"; code=$?
+  assert_exit "record is a directory: exits 1" 1 "$code"
+  assert_contains "record is a directory: clean message" "$out" "install record"
+  assert_not_contains "record is a directory: no traceback" "$out" "Traceback"
+  assert_missing "record is a directory: nothing placed" "$sb/cwd/.claude/skills"
+}
+
+test_record_tmp_symlink_not_followed() {
+  _head "a planted .tmp symlink is not followed when the record is written"
+  local sb rec
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/.claude"; printf 'PRECIOUS\n' > "$sb/target"
+  ln -s "$sb/target" "$rec.tmp"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  assert_contains "the link's target is unchanged" "$(cat "$sb/target")" "PRECIOUS"
+  [[ -f "$rec" && ! -L "$rec" ]] && _ok "the record is a regular file" || _fail "the record is a regular file"
+  assert_missing "no temp link left behind" "$rec.tmp"
 }
 
 test_record_other_harness_or_scope_refused() {
@@ -852,6 +876,7 @@ test_record_source_ref
 test_record_ref_per_asset
 test_record_user_scope_root
 test_record_bad_record_stops_before_any_copy
+test_record_tmp_symlink_not_followed
 test_record_other_harness_or_scope_refused
 test_record_survives_midway_failure
 test_record_mode_rejects_missing_placed_path

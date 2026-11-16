@@ -77,7 +77,7 @@ PY
 # install.sh copies assets with cp -R and records files by content, so a symlink would
 # be placed and recorded by its target (or dangle).
 _head "symlinks"
-symlinks="$(find "$REPO/skills" "$REPO/suites" -type l 2>/dev/null)"
+symlinks="$(find "$REPO/skills" "$REPO/suites" -type l 2>/dev/null || true)"
 if [[ -n "$symlinks" ]]; then
   _fail "symlink inside skills/ or suites/ (installer can't record it): $(printf '%s' "$symlinks" | tr '\n' ' ')"
 else
