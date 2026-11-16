@@ -24,6 +24,7 @@ its design.
 | Installer entrypoint | `install.sh` (repo root, not `scripts/`) |
 | Harness manifest | `scripts/harnesses.json` — one entry per harness: `label`, `scopes` (scope key → root path), `mapping` (asset category → destination template) |
 | Dependency manifest | `{category}/{name}/dependencies.json` — colocated, one file per asset, optional; flat JSON array of repo-relative paths (e.g. `["skills/create-adr", "skills/yaml-frontmatter"]`); absent means no dependencies. See [ADR-0009](../adrs/ADR-0009-colocated-dependency-manifest.md). |
+| Suite manifest placements | `suites/{name}/manifest.json` ([ADR-0008](../adrs/ADR-0008-suite-manifest-resource-kind-placements.md)), expanded by `plan_item()` via `_json placements`; `copy` placements are per file and never remove a directory, `merge` rows are skipped with a note until implemented; no suite has a manifest yet |
 | User docs | `README.md`'s `## Installing` section |
 | Structural lint | `scripts/validate.sh`'s `── harnesses ──` section |
 
