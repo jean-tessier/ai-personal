@@ -1921,6 +1921,103 @@ test_uninstall_unlinks_symlink_without_following
 test_uninstall_dry_run_and_flag_conflicts
 test_uninstall_failed_delete_keeps_record_honest
 
+# ── tier-layered-teams: install then --uninstall (the real manifest suite + ADR-0012) ──
+# tlt_tree <dir>: every file under <dir> with its hash, sorted: two equal snapshots mean nothing was touched.
+tlt_tree() { ( cd "$1" && find . -type f -exec shasum {} + | sort ); }
+
+test_tlt_uninstall_copilot_project() {
+  _head "tier-layered-teams: copilot project install then --uninstall removes all 30 files, the record and the emptied dirs"
+  local sb out code
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null
+  tlt_install "$sb" --harness copilot --scope project >/dev/null
+  out="$(tlt_install "$sb" --harness copilot --scope project --uninstall)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "30 removed lines" 30 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "no file left, not even the record" 0 "$(count_files "$sb/cwd")"
+  assert_exit "only the scope root is left: scripts/, .vscode/ and scratch/ are pruned" 0 "$([[ "$(cd "$sb/cwd" && find . -mindepth 1)" == "./.github" ]]; echo $?)"
+}
+
+test_tlt_uninstall_copilot_user_owned_files_survive() {
+  _head "tier-layered-teams: --uninstall leaves the project's own Makefile, .gitignore, settings.json and scripts/mine.sh byte-identical"
+  local sb out code f
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; mkdir -p "$sb/cwd/.vscode" "$sb/cwd/scripts"
+  printf 'MINE-M\n' > "$sb/cwd/Makefile"; printf 'MINE-G\n' > "$sb/cwd/.gitignore"
+  printf 'MINE-S\n' > "$sb/cwd/.vscode/settings.json"; printf 'MINE-X\n' > "$sb/cwd/scripts/mine.sh"
+  tlt_install "$sb" --harness copilot --scope project >/dev/null
+  out="$(tlt_install "$sb" --harness copilot --scope project --uninstall)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "27 removed lines: the 3 merge-skipped files were never recorded" 27 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "the user's 4 files are all that is left" 0 "$([[ "$(cd "$sb/cwd" && find . -type f | sort)" == "$(printf '%s\n' ./.gitignore ./.vscode/settings.json ./Makefile ./scripts/mine.sh)" ]]; echo $?)"
+  for f in Makefile:MINE-M .gitignore:MINE-G .vscode/settings.json:MINE-S scripts/mine.sh:MINE-X; do
+    assert_exit "${f%%:*} is byte-identical" 0 "$([[ "$(cat "$sb/cwd/${f%%:*}")" == "${f##*:}" ]]; echo $?)"
+  done
+}
+
+test_tlt_uninstall_copilot_edited_file_keeps_the_asset() {
+  _head "tier-layered-teams: an edited installed file keeps the whole suite; --force lists the mismatch, then deletes it"
+  local sb out code rec edited first_removed mismatch
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; rec="$sb/cwd/.github/.ai-personal-install.json"
+  edited=".github/agents/coding-lead.agent.md"
+  tlt_install "$sb" --harness copilot --scope project >/dev/null
+  printf 'edit\n' >> "$sb/cwd/$edited"
+  out="$(tlt_install "$sb" --harness copilot --scope project --uninstall)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "says it keeps the suite and names the edited file" "$out" "keep    suites/tier-layered-teams, modified: $edited (use --force to delete it)"
+  assert_exit "only the one modified line" 1 "$(printf '%s\n' "$out" | grep -c 'modified:')"
+  assert_exit "nothing removed" 0 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "all 30 files still there, record included" 31 "$(count_files "$sb/cwd")"
+  assert_contains "the record still holds the suite" "$(record_json "$rec" 'sorted(d["assets"])')" "['suites/tier-layered-teams']"
+  out="$(tlt_install "$sb" --harness copilot --scope project --uninstall --force)"; code=$?
+  assert_exit "--force: exits 0" 0 "$code"
+  mismatch="$(printf '%s\n' "$out" | grep -n 'modified:' | cut -d: -f1)"; first_removed="$(printf '%s\n' "$out" | grep -n '^  removed ' | head -1 | cut -d: -f1)"
+  assert_contains "--force: names the edited file" "$out" "force    suites/tier-layered-teams, modified: $edited"
+  assert_exit "--force: the mismatch is listed before the first removal" 0 "$([[ -n "$mismatch" && -n "$first_removed" && "$mismatch" -lt "$first_removed" ]]; echo $?)"
+  assert_exit "--force: all 30 removed" 30 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "--force: nothing left" 0 "$(count_files "$sb/cwd")"
+}
+
+test_tlt_uninstall_claude_code() {
+  _head "tier-layered-teams: claude-code project and user scope round trips leave no suite file and no record"
+  local sb out code tree
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null
+  tlt_install "$sb" --harness claude-code --scope project >/dev/null
+  out="$(tlt_install "$sb" --harness claude-code --scope project --uninstall)"; code=$?
+  assert_exit "project: exits 0" 0 "$code"
+  assert_exit "project: 9 removed lines" 9 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "project: no file left, record included" 0 "$(count_files "$sb/cwd")"
+  assert_missing "project: no suite directory left" "$sb/cwd/.claude/suites"
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; printf 'keep\n' > "$sb/cwd/keep.txt"
+  tlt_install "$sb" --harness claude-code --scope user >/dev/null
+  tree="$(tlt_tree "$sb/cwd")"
+  out="$(tlt_install "$sb" --harness claude-code --scope user --uninstall)"; code=$?
+  assert_exit "user: exits 0" 0 "$code"
+  assert_exit "user: 9 removed lines" 9 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "user: no file left under ~/.claude, record included" 0 "$(count_files "$sb/home")"
+  assert_missing "user: no suite directory left" "$sb/home/.claude/suites"
+  assert_exit "user: the cwd is untouched" 0 "$([[ "$tree" == "$(tlt_tree "$sb/cwd")" && "$(cd "$sb/cwd" && find . -mindepth 1)" == "./keep.txt" ]]; echo $?)"
+}
+
+test_tlt_uninstall_copilot_dry_run() {
+  _head "tier-layered-teams: --dry-run --uninstall lists 30 would-remove lines and changes nothing"
+  local sb out code before
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null
+  tlt_install "$sb" --harness copilot --scope project >/dev/null
+  before="$(tlt_tree "$sb/cwd")"
+  out="$(tlt_install "$sb" --harness copilot --scope project --uninstall --dry-run)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "30 would-remove lines" 30 "$(printf '%s\n' "$out" | grep -c '^  \[dry-run\] would remove ')"
+  assert_exit "no removed line" 0 "$(printf '%s\n' "$out" | grep -c '^  removed ')"
+  assert_exit "every file and the record are byte-identical" 0 "$([[ "$before" == "$(tlt_tree "$sb/cwd")" ]]; echo $?)"
+  assert_exit "31 files: the 30 plus the record" 31 "$(count_files "$sb/cwd")"
+  assert_exit "no .tmp left" 0 "$(find "$sb/cwd" -name '*.tmp' | wc -l | tr -d ' ')"
+}
+
+test_tlt_uninstall_copilot_project
+test_tlt_uninstall_copilot_user_owned_files_survive
+test_tlt_uninstall_copilot_edited_file_keeps_the_asset
+test_tlt_uninstall_claude_code
+test_tlt_uninstall_copilot_dry_run
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"
