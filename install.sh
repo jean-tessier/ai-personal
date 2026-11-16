@@ -37,8 +37,8 @@ _head() { printf "\n${BLD}── %s ──${NC}\n" "$1"; }
 
 # True for the one (harness, category) pair install.sh currently knows how to
 # translate a plugin-shaped item for post-copy (see translate_to_copilot()).
-# Centralized so select_assets()'s eligibility filter and apply_selection()'s
-# dry-run note / real translate-call can't drift out of sync with each other.
+# Only plan_item() asks: it applies the plugin-shaped eligibility filter and
+# stamps the resulting row's transform, which apply_selection() just follows.
 is_copilot_suite_category() { [[ "$HARNESS" == "copilot" && "$1" == "suites" ]]; }
 
 command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/harness JSON"; exit 1; }
@@ -304,10 +304,52 @@ _read_loop_pick() {
   done < "$items_file"
 }
 
+# ── Plan one item ───────────────────────────────────────────────────────────
+# The single place that decides whether an asset can go to $HARNESS/$SCOPE and
+# where: category mapping lookup, Copilot plugin-shaped eligibility, destination
+# and post-copy transform. Both select_assets() (requested items) and
+# resolve_dependencies() (dependencies) call it, so they can't drift apart.
+#
+# plan_item <asset> <label> <out_file>
+#   asset     repo-relative path, e.g. skills/atomic-commits (also the src_rel)
+#   label     how to name the asset in a skip note, e.g. "dependency 'skills/x'"
+#   out_file  gets one row appended:
+#             asset<TAB>src_rel<TAB>dest<TAB>mode<TAB>transform
+#             dest is root-anchored in resolve_root()'s convention (relative =
+#             $PWD, "~/" = $HOME); mode is "item" (whole-directory skip-or-replace);
+#             transform is the post-copy rewrite, or "-" for none.
+# Returns 1, after printing a note, if the asset can't be placed for this harness.
+plan_item() {
+  local asset="$1" label="$2" out="$3" category name template root transform="-"
+  case "$asset" in
+    skills/*|suites/*) category="${asset%%/*}" ;;
+    *) _warn "$label has an unrecognized category — skipped"; return 1 ;;
+  esac
+  name="${asset##*/}"
+  if ! template=$(_json mapping "$HARNESS" "$category"); then
+    _warn "$label has no mapping for harness '$HARNESS' — skipped"
+    return 1
+  fi
+  # Copilot only understands the plugin-shaped suites install.sh knows how to
+  # translate (see translate_to_copilot()) — a suite without a
+  # .claude-plugin/plugin.json at its root (a drop-in Copilot payload, or a
+  # multi-harness suite that ships its own hand-authored Copilot variant
+  # already) has no Copilot form for install.sh to place here.
+  if is_copilot_suite_category "$category"; then
+    if ! _json suite_plugin_shaped "$name"; then
+      _warn "$label is not plugin-shaped — no Copilot translation available, skipped"
+      return 1
+    fi
+    transform=copilot-plugin
+  fi
+  root="$(_json scope_root "$HARNESS" "$SCOPE")"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$asset" "$asset" "$root/${template//"{name}"/$name}" item "$transform" >> "$out"
+}
+
 # ── Selection step ──────────────────────────────────────────────────────────
-# Flag-driven: every item in each requested category, resolved to a concrete
-# destination path, written to $SELECTION_FILE as
-# "category<TAB>name<TAB>src_rel<TAB>dest_rel". When no --assets was passed
+# Flag-driven: every item in each requested category, planned by plan_item()
+# and written to $SELECTION_FILE as
+# "asset<TAB>src_rel<TAB>dest<TAB>mode<TAB>transform". When no --assets was passed
 # AND stdin is a real TTY, the full per-category item list is routed through
 # pick_items() first so the user chooses a subset — otherwise (explicit
 # --assets, or no TTY) every item is taken, same as before Task 4.
@@ -317,7 +359,7 @@ _read_loop_pick() {
 # path can be exercised from a script with no real TTY attached.
 select_assets() {
   : > "$SELECTION_FILE"
-  local category template found name src_rel dest_rel items_file
+  local category found name src_rel items_file
   local interactive=0
   if [[ -z "$ASSETS_RAW" ]]; then
     if [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
@@ -326,7 +368,9 @@ select_assets() {
   fi
 
   for category in "${CATEGORIES[@]}"; do
-    if ! template=$(_json mapping "$HARNESS" "$category"); then
+    # Early, whole-category check (before the picker would ask about items that
+    # could never be placed); plan_item() makes the authoritative per-item call.
+    if ! _json mapping "$HARNESS" "$category" >/dev/null; then
       _warn "category '$category' has no mapping for harness '$HARNESS' — skipped"
       continue
     fi
@@ -348,19 +392,7 @@ select_assets() {
 
     while IFS=$'\t' read -r name src_rel; do
       [[ -z "$name" ]] && continue
-      # Copilot only understands the plugin-shaped suites install.sh knows how to
-      # translate (see translate_to_copilot()) — a suite without a
-      # .claude-plugin/plugin.json at its root (a drop-in Copilot payload, or a
-      # multi-harness suite that ships its own hand-authored Copilot variant
-      # already) has no Copilot form for install.sh to place here.
-      if is_copilot_suite_category "$category"; then
-        if ! _json suite_plugin_shaped "$name"; then
-          _warn "suite '$name' is not plugin-shaped — no Copilot translation available, skipped"
-          continue
-        fi
-      fi
-      dest_rel="${template//"{name}"/$name}"
-      printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$src_rel" "$dest_rel" >> "$SELECTION_FILE"
+      plan_item "$src_rel" "${category%s} '$name'" "$SELECTION_FILE" || true
     done < "$items_file"
 
     if [[ $found -eq 0 ]]; then
@@ -377,10 +409,10 @@ select_assets() {
 #     dependencies/skills — are unchanged, since both ecosystems share them).
 #   - agents/*.md -> agents/*.agent.md (Copilot's own filename convention,
 #     already used by this repo's hand-authored Copilot payloads).
-# select_assets() only ever routes pluginShaped suites here for the copilot
-# harness (see its per-item guard above) — drop-in Copilot payloads
-# (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
-# function and are copied wholesale, unchanged, same as before this existed.
+# plan_item() only ever routes pluginShaped suites here for the copilot
+# harness, whether requested or pulled in as a dependency — drop-in Copilot
+# payloads (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
+# function: they have no plugin form, so plan_item() skips them with a note.
 translate_to_copilot() {
   local dest="$1" manifest="$dest/.claude-plugin/plugin.json" f base
 
@@ -407,50 +439,40 @@ translate_to_copilot() {
 # (including newly-added rows) so transitive deps are picked up too, until a
 # pass finds nothing new.
 resolve_dependencies() {
-  local changed=1 category name src_rel dest_rel dep dep_category dep_name template reply decision
+  local changed=1 asset src_rel dest mode transform dep reply decision
   local candidates_file="$WORK/dep_candidates.txt"
   local resolvable_file="$WORK/dep_resolvable.tsv"
+  local skipped_file="$WORK/dep_skipped.txt"   # deps plan_item() rejected: noted once, never re-planned
+  : > "$skipped_file"
 
   while [[ $changed -eq 1 ]]; do
     changed=0
 
     # Pass 1: every dep of every currently-selected row, minus ones already
-    # selected (matched on the src_rel/path column) and minus dupes within
-    # this pass.
+    # selected (matched on the asset column), minus ones plan_item() already
+    # rejected in an earlier round, and minus dupes within this pass.
     : > "$candidates_file"
-    while IFS=$'\t' read -r category name src_rel dest_rel; do
+    while IFS=$'\t' read -r asset src_rel dest mode transform; do
       while IFS= read -r dep; do
         [[ -z "$dep" ]] && continue
-        grep -qF $'\t'"$dep"$'\t' "$SELECTION_FILE" && continue
+        cut -f1 "$SELECTION_FILE" | grep -qxF "$dep" && continue
+        grep -qxF "$dep" "$skipped_file" && continue
         grep -qxF "$dep" "$candidates_file" && continue
         printf '%s\n' "$dep" >> "$candidates_file"
       done < <(_json deps "$src_rel")
     done < "$SELECTION_FILE"
     [[ -s "$candidates_file" ]] || break
 
-    # Pass 2: resolve each candidate's category + harness mapping. A category
-    # with no mapping for this harness is warn-and-skip, same as
-    # select_assets() does for a whole requested category — never a hard
-    # failure by itself.
+    # Pass 2: plan each candidate with plan_item(), the same decision
+    # select_assets() makes for a requested item. One it can't place (no
+    # mapping, unrecognized category, not plugin-shaped) is warn-and-skip —
+    # never a hard failure by itself — and remembered so later rounds don't
+    # print the same note again.
     : > "$resolvable_file"
     while IFS= read -r dep; do
-      case "$dep" in
-        skills/*) dep_category=skills ;;
-        suites/*) dep_category=suites ;;
-        *) _warn "dependency '$dep' has an unrecognized category — skipped"; continue ;;
-      esac
-      if ! template=$(_json mapping "$HARNESS" "$dep_category"); then
-        _warn "dependency '$dep' has no mapping for harness '$HARNESS' — skipped"
-        continue
+      if ! plan_item "$dep" "dependency '$dep'" "$resolvable_file"; then
+        printf '%s\n' "$dep" >> "$skipped_file"
       fi
-      dep_name="${dep##*/}"
-      # Same eligibility rule select_assets() applies to a requested suite.
-      if is_copilot_suite_category "$dep_category" && ! _json suite_plugin_shaped "$dep_name"; then
-        _warn "dependency '$dep' is not plugin-shaped — no Copilot translation available, skipped"
-        continue
-      fi
-      dest_rel="${template//"{name}"/$dep_name}"
-      printf '%s\t%s\t%s\t%s\n' "$dep_category" "$dep_name" "$dep" "$dest_rel" >> "$resolvable_file"
     done < "$candidates_file"
     [[ -s "$resolvable_file" ]] || break
 
@@ -462,7 +484,7 @@ resolve_dependencies() {
     elif [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
       _head "dependencies"
       printf '  not yet selected:\n'
-      cut -f3 "$resolvable_file" | sed 's/^/    /'
+      cut -f1 "$resolvable_file" | sed 's/^/    /'
       printf 'Add them? [Y/n] '
       read -r reply
       case "$reply" in
@@ -470,19 +492,17 @@ resolve_dependencies() {
         *)        decision=skip ;;
       esac
     else
-      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f1 "$resolvable_file" | tr '\n' ' ')"
       exit 1
     fi
 
     if [[ "$decision" == skip ]]; then
-      _warn "skipping dependencies (--no-deps): $(cut -f3 "$resolvable_file" | tr '\n' ' ')"
+      _warn "skipping dependencies (--no-deps): $(cut -f1 "$resolvable_file" | tr '\n' ' ')"
       break
     fi
 
-    while IFS=$'\t' read -r category name dep dest_rel; do
-      printf '%s\t%s\t%s\t%s\n' "$category" "$name" "$dep" "$dest_rel" >> "$SELECTION_FILE"
-      changed=1
-    done < "$resolvable_file"
+    cat "$resolvable_file" >> "$SELECTION_FILE"
+    changed=1
   done
 }
 
@@ -502,18 +522,19 @@ apply_selection() {
     return
   fi
 
-  local dest_root
-  dest_root="$(resolve_root "$(_json scope_root "$HARNESS" "$SCOPE")")"
+  local root
+  root="$(_json scope_root "$HARNESS" "$SCOPE")"
 
   _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run" || echo "installing")"
-  local category name src_rel dest_rel src dest
-  while IFS=$'\t' read -r category name src_rel dest_rel; do
+  local asset src_rel dest_spec mode transform category src dest
+  while IFS=$'\t' read -r asset src_rel dest_spec mode transform; do
+    category="${asset%%/*}"
     src="$SRC/$src_rel"
-    dest="$dest_root/$dest_rel"
+    dest="$(resolve_root "$dest_spec")"
 
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
-      is_copilot_suite_category "$category" && note="  (copilot-translated)"
+      [[ "$transform" != "-" ]] && note="  (copilot-translated)"
       if [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
@@ -531,10 +552,10 @@ apply_selection() {
     mkdir -p "$(dirname "$dest")"
     rm -rf "$dest"
     cp -R "$src" "$dest"
-    if is_copilot_suite_category "$category"; then
+    if [[ "$transform" == "copilot-plugin" ]]; then
       translate_to_copilot "$dest"
     fi
-    _ok "$dest_rel"
+    _ok "${dest_spec#"$root"/}"
   done < "$SELECTION_FILE"
 }
 
