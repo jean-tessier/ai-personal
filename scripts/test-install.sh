@@ -52,6 +52,12 @@ new_sandbox() {
   printf '%s' "$d"
 }
 
+# copy_tree_for_validate <dest>: a scratch tree validate.sh can run in and pass clean
+# (it lints install.sh too, so install.sh must come along).
+copy_tree_for_validate() {
+  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$REPO/install.sh" "$1/"
+}
+
 # Runs install.sh against this checkout (--local, never the real network)
 # with an isolated PWD/HOME so the real repo and real $HOME are never touched.
 run_install() {
@@ -443,7 +449,8 @@ test_manifest_lint_rejects_bad_manifest() {
   sb="$(new_sandbox)"
   src="$sb/fake_src"
   mkdir -p "$src"
-  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  copy_tree_for_validate "$src"
+  bash "$src/scripts/validate.sh" </dev/null >/dev/null 2>&1; assert_exit "unmodified scratch tree validates clean" 0 "$?"
   printf '%s' '{"bogus":[],"claude-code":[{"kind":"agents","src":"../x","mode":"copy"},{"kind":["agents"],"src":"claude-code/agents","mode":"copy"}]}' \
     > "$src/suites/tier-layered-teams/manifest.json"
   out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
@@ -464,7 +471,7 @@ test_translate_lint_rejects_bad_key() {
   sb="$(new_sandbox)"
   src="$sb/fake_src"
   mkdir -p "$src"
-  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  copy_tree_for_validate "$src"
   python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["copilot"]["translate"]={"suites":"bogus-transform","prompts":"copilot-plugin","skills":"copilot-plugin"}; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
   out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
   assert_exit "bad translate: exits 1" 1 "$code"
@@ -679,7 +686,7 @@ record_json() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); pri
 # record_mode <args...>: runs install.sh's own python `record` mode directly.
 record_mode() {
   local py
-  py="$(awk '/python3 - "\$@" <<.PY.$/{f=1;next} /^PY$/{f=0} f' "$INSTALL")"
+  py="$(awk '/python3 -I - "\$@" <<.PY.$/{f=1;next} /^PY$/{f=0} f' "$INSTALL")"
   python3 -c "$py" record "$@"
 }
 
@@ -861,11 +868,30 @@ test_validate_rejects_symlinks_in_assets() {
   local sb src out code
   sb="$(new_sandbox)"; src="$sb/fake_src"
   mkdir -p "$src"
-  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  copy_tree_for_validate "$src"
+  bash "$src/scripts/validate.sh" </dev/null >/dev/null 2>&1; assert_exit "unmodified scratch tree validates clean" 0 "$?"
   ln -s x "$src/skills/atomic-commits/l"
   out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
   assert_exit "exits 1" 1 "$code"
   assert_contains "names the symlink" "$out" "symlink"
+}
+
+test_python_ignores_cwd_modules() {
+  _head "python runs isolated: a json.py in the cwd is never imported (SEC1)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  printf 'open("%s", "w").close()\n' "$sb/pwned" > "$sb/cwd/json.py"
+  run_install "$sb" --harness claude-code --scope project --assets skills --dry-run </dev/null >/dev/null 2>&1
+  assert_missing "install.sh did not import cwd json.py" "$sb/pwned"; rm -f "$sb/pwned"
+  rm -f "$sb/pwned"
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$REPO/scripts/catalog.sh" </dev/null >/dev/null 2>&1 )
+  assert_missing "catalog.sh did not import cwd json.py" "$sb/pwned"
+  src="$sb/fake_src"; mkdir -p "$src"
+  copy_tree_for_validate "$src"
+  printf '%s\n' 'python3 - <<X' 'X' >> "$src/scripts/catalog.sh"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "validate.sh exits 1 on a non-isolated python3" 1 "$code"
+  assert_contains "names the rule" "$out" "python3 without -I"
 }
 
 test_record_lists_every_copied_file
@@ -881,6 +907,7 @@ test_record_other_harness_or_scope_refused
 test_record_survives_midway_failure
 test_record_mode_rejects_missing_placed_path
 test_validate_rejects_symlinks_in_assets
+test_python_ignores_cwd_modules
 
 # Suite manifest placements (ADR-0008, copy mode): a fixture suite "fx" with a manifest.json.
 # manifest_fixture <sandbox> <manifest json>: builds <sandbox>/fake_src (real harnesses.json) and prints its path.

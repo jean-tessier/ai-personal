@@ -339,6 +339,18 @@ else
 fi
 [[ $harnesses_count -eq 0 ]] && printf "  (no harnesses yet)\n"
 
+# ── Python isolation (SEC1) ───────────────────────────────────────────────────
+# ponytail: flag-form invocations only (`python3 -`, `-m`, `-c`, `<`); a bare `python3 script.py` isn't caught.
+_head "install.sh / catalog.sh run python3 in isolated mode"
+iso_rc=0; iso_hits="$(grep -nE 'python3 +(-[^I]|-$|<)' "$REPO/install.sh" "$REPO/scripts/catalog.sh")" || iso_rc=$?
+if [[ $iso_rc -eq 0 ]]; then
+  while IFS= read -r hit; do _fail "python3 without -I (a cwd json.py would run): $hit"; done <<<"$iso_hits"
+elif [[ $iso_rc -eq 1 ]]; then
+  _ok "every python3 invocation uses -I"
+else
+  _fail "python3 isolation lint crashed (grep exit $iso_rc; install.sh or scripts/catalog.sh unreadable)"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 printf "\n"
 if [[ $ERRORS -eq 0 ]]; then
