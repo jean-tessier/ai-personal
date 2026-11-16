@@ -77,14 +77,16 @@ Each real install also writes `.ai-personal-install.json` in the scope root (for
 it came from. Re-installs merge into it; `--dry-run` doesn't write it. See
 [ADR-0012](docs/adrs/ADR-0012-install-record.md).
 
-`--uninstall --harness <key> --scope <key>` removes the files that record lists, without fetching
-anything, then prunes the empty directories they leave (never the scope root, the project root or
-`$HOME`) and shrinks the record, deleting it once it is empty. An asset with any file you changed
-is kept whole and named; `--force` lists those files and then deletes them too. Files you added
-yourself are never touched. `--assets` limits it to some categories, and `--dry-run` only lists
-what it would do. A record with an unsafe path (absolute, `..`, outside the project root or
-`$HOME`) stops it before anything is deleted. It can't be combined with `--ref`, `--local`,
-`--yes-deps` or `--no-deps`.
+`--uninstall --harness <key> --scope <key>` fetches the tree like an install does (so `--ref` pins
+it), reads only that scope root's `.ai-personal-install.json` and removes the files it lists. It
+then prunes the empty directories they leave (never the scope root, the project root or `$HOME`)
+and shrinks the record, deleting it once it is empty. With no record it says so and exits 0. An
+asset with any file you changed is kept whole and named; `--force` lists those files and then
+deletes them too. Files you added yourself are never touched. `--assets` limits it to some
+categories, and `--dry-run` only lists what it would do. A record with an unsafe path (absolute,
+`..`, a `.git` segment, a control character, outside the project root or `$HOME`) stops it before
+anything is deleted. Beyond that, uninstall trusts the record you hold, so run `--dry-run` first.
+It can't be combined with `--yes-deps` or `--no-deps`.
 
 Any asset can declare dependencies on other assets in a colocated `dependencies.json` (a flat
 array of repo-relative paths, e.g. `["skills/create-adr", "skills/yaml-frontmatter"]` for

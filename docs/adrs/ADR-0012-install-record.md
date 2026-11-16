@@ -90,6 +90,11 @@ The record is a user-editable file, so a consumer that deletes files treats it a
 - Rewrite the shrunken record with the same safe temp write (unlink, then exclusive create, then rename).
 - Prune empty directories bottom-up, never above the scope root, the project root or `$HOME`.
 
+Note (2026-11-16, IM2 review): uninstall reads only `<scope root>/.ai-personal-install.json`,
+resolved from `harnesses.json` after the same fetch as an install, and only if its real parent is
+inside `$PWD` or `$HOME`. It also refuses a path with a `.git` segment or a control character.
+Beyond these checks it trusts the record you hold, so run `--dry-run` first.
+
 ## Consequences
 
 ### Positive
