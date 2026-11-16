@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
 | `--ref <ref>` | tag, branch, or commit sha to fetch (default: `main`); see the note below |
 | `--dry-run` | print planned copy operations; write nothing |
-| `--force` | overwrite existing destination files/dirs (default: skip existing) |
+| `--force` | overwrite existing destination files/dirs (default: skip existing). With `--harness copilot` this includes project-root files placed by a manifest suite (`tier-layered-teams`: `Makefile`, `.gitignore`, `.vscode/*`, `scripts/*`, `copilot-instructions.md`); preview with `--dry-run --force`, or pass `--assets skills` to refresh skills only. |
 | `--yes-deps` | add declared dependencies without prompting (see below) |
 | `--no-deps` | skip declared dependencies instead of adding or prompting; can't be combined with `--yes-deps` |
 | `-h`, `--help` | show usage |
@@ -102,7 +102,7 @@ Claude Code/Copilot plugins — see
 - **Places manifest suites per file**: a suite with a `manifest.json`
   ([ADR-0008](docs/adrs/ADR-0008-suite-manifest-resource-kind-placements.md)) installs only
   the chosen harness's variant, file by file, and never installs its root docs.
-  `suites/tier-layered-teams/` works this way: `--harness copilot --assets suites` writes its
+  `suites/tier-layered-teams/` works this way: `--harness copilot` with suites selected (including the default all-categories run) writes its
   payload into the project root (`Makefile`, `scripts/`, `.vscode/`, ...), creating missing files
   and leaving existing ones alone (`--force` overwrites them); see the suite's
   [USAGE.md](suites/tier-layered-teams/USAGE.md) for the known limitations.

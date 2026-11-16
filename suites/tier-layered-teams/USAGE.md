@@ -26,9 +26,10 @@ underneath don't change.
 
 **Before dispatching**: workers self-escalate to the same external tools the copilot
 variant's preflight doctor checks for (`rg`, `fd`, `ast-grep`, `jq`, `tokei`, `comby`,
-`make`, `node`, `npm` — see the tool-axis tables in [`PROTOCOL.md`](PROTOCOL.md)). After
-deploying the payload (see Copilot variant below), run `scripts/preflight.sh` from the
-target repo's root so its stack checks read that repo's files, not this one's; a missing
+`make`, `node`, `npm` — see the tool-axis tables in [`PROTOCOL.md`](PROTOCOL.md)). Run
+`bash <ai-personal checkout>/suites/tier-layered-teams/copilot/scripts/preflight.sh` from the
+target repo's root (a claude-code install doesn't carry it; after a copilot install it is
+`scripts/preflight.sh`) so its stack checks read that repo's files, not this one's; a missing
 T1/T2 tool doesn't fail loudly, it silently no-ops.
 
 A run starts by dispatching
@@ -62,6 +63,11 @@ section), and each file is handled on its own ([ADR-0013](../../docs/adrs/ADR-00
 A second run is therefore a no-op for everything already there. `install.sh` never does
 format-aware merging (no JSON deep-merge, no `.gitignore` union).
 
+**`--force` reaches your own files.** With `--harness copilot`, `--force` overwrites existing
+project-root files too (`Makefile`, `.gitignore`, `.vscode/*`, `scripts/*`,
+`.github/copilot-instructions.md`), and this applies to the default all-categories run as well.
+Preview with `--dry-run --force`, or pass `--assets skills` to refresh skills only.
+
 **Known limitations** (accepted when this suite was migrated to its manifest):
 
 - **Dangling `PROTOCOL.md` link.** Suite-root docs (`README.md`, `USAGE.md`, `PROTOCOL.md`) are never
@@ -74,11 +80,11 @@ format-aware merging (no JSON deep-merge, no `.gitignore` union).
   did. Check `git status` after installing, and use `--dry-run` first to see the file list.
 
 **Upgrading from an older install** (claude-code): installs before the manifest copied the whole
-suite directory and were never recorded, so `install.sh` cannot clean them up. After upgrading
-you will have two plugin roots. Delete the old one by hand:
+suite directory, and `install.sh` never removes files a newer layout no longer places, so after
+upgrading you will have two plugin roots. Delete the old one by hand:
 
 ```bash
-rm -rf .claude/suites/tier-layered-teams/claude-code   # or ~/.claude/suites/... for --scope user
+rm -rf .claude/suites/tier-layered-teams/claude-code   # or rm -rf ~/.claude/suites/tier-layered-teams/claude-code for --scope user
 ```
 
 The old whole-directory install also left `README.md`, `USAGE.md`, `PROTOCOL.md` and `copilot/` in

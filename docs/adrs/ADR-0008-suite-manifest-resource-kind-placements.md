@@ -22,7 +22,7 @@ suite carries a `manifest.json`.
 **Implementation note (2026-11-16, migration):** `suites/tier-layered-teams` now carries the
 `manifest.json` of the example below, so the schema is implemented **and** its first suite is
 migrated. `install.sh --harness copilot --assets suites` places the same 30 files `cp -R` did (copy
-rows skip existing files, merge rows never overwrite), and `--harness claude-code` places only
+rows skip existing files, merge rows never overwrite without `--force`), and `--harness claude-code` places only
 `agents/` and `.claude-plugin/`. Two limitations were accepted at migration: the installed
 `00-escalation-protocol.md` and `trigger-semantics/SKILL.md` link a suite-root `PROTOCOL.md` that is
 never installed, and the copilot payload writes into the project root. An upgrade from a

@@ -46,6 +46,7 @@ per harness, named by that harness's key in `scripts/harnesses.json`:
 ├── README.md         # The pattern, harness-agnostic
 ├── USAGE.md          # Per-variant invocation
 ├── PROTOCOL.md        # Shared must-not-drift semantics (optional)
+├── manifest.json      # Per-harness install placements (optional; ADR-0008)
 ├── claude-code/       # named by the harnesses.json key
 │   └── agents/
 │       └── ...
