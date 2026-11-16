@@ -458,7 +458,7 @@ test_manifest_lint_rejects_bad_manifest() {
   assert_contains "flags unknown harness key" "$out" "unknown harness key 'bogus'"
   assert_contains "flags non-relative src" "$out" "src must be relative"
   assert_contains "a lint crash is a FAIL, not a silent ok" "$out" "check crashed"
-  rm "$src/suites/tier-layered-teams/manifest.json"
+  cp "$REPO/suites/tier-layered-teams/manifest.json" "$src/suites/tier-layered-teams/manifest.json"
   python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); m=d["copilot"]["mapping"]; m["suite"]=m.pop("suites"); json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
   out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
   assert_exit "typo'd mapping key: exits 1" 1 "$code"
@@ -709,7 +709,7 @@ test_record_covers_copilot_translation_and_dependencies() {
   sb="$(new_sandbox)"; rec="$sb/cwd/.github/.ai-personal-install.json"
   run_install "$sb" --harness copilot --scope project --assets suites --yes-deps </dev/null >/dev/null 2>&1
   assert_record "translated files hash as placed, every file on disk recorded" "$rec" "$sb/cwd" "$sb/home" 0 \
-    "$(cd "$sb/cwd" && find .github -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
+    "$(cd "$sb/cwd" && find . -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
   assert_contains "a translated plugin.json is recorded" "$(record_json "$rec" '[k for a in d["assets"].values() for k in a["files"] if k.endswith("/plugin.json")]')" "/plugin.json"
   assert_contains "a dependency is recorded as its own asset" "$(record_json "$rec" 'sorted(d["assets"])')" "'skills/"
 }
@@ -1329,6 +1329,109 @@ test_merge_dry_run_force_says_overwrite() {
   assert_contains "file untouched" "$(cat "$sb/cwd/scripts/one.sh")" "MINE"
 }
 test_merge_dry_run_force_says_overwrite
+
+# tier-layered-teams through its real manifest.json (ADR-0008, first migrated suite).
+# tlt_src <sandbox>: a minimal source (real catalog.sh, harnesses.json and the real suite) so only this suite installs.
+tlt_src() {
+  local src="$1/tlt_src"
+  mkdir -p "$src/scripts" "$src/suites"
+  cp "$REPO/scripts/catalog.sh" "$REPO/scripts/harnesses.json" "$src/scripts/"
+  cp -R "$REPO/suites/tier-layered-teams" "$src/suites/"
+  printf '%s' "$src"
+}
+tlt_install() { # <sandbox> <args...>: project scope unless --scope is passed
+  local sb="$1"; shift
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --local "$sb/tlt_src" --assets suites "$@" ) 2>&1 </dev/null
+}
+# tlt_payload_diff <target>: lists every file of the copilot payload (what cp -R would put there) that is missing, differs or has another exec bit.
+tlt_payload_diff() {
+  local f
+  ( cd "$REPO/suites/tier-layered-teams/copilot" && find . -type f | sort ) | while IFS= read -r f; do
+    if [[ ! -f "$1/$f" ]]; then echo "missing $f"
+    elif ! cmp -s "$REPO/suites/tier-layered-teams/copilot/$f" "$1/$f"; then echo "differs $f"
+    elif [[ "$([[ -x "$REPO/suites/tier-layered-teams/copilot/$f" ]] && echo x)" != "$([[ -x "$1/$f" ]] && echo x)" ]]; then echo "mode $f"
+    fi
+  done
+}
+
+test_tlt_copilot_places_the_cp_r_payload() {
+  _head "tier-layered-teams on copilot places exactly what cp -R of copilot/ places, and records it"
+  local sb out code ref
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; ref="$sb/ref"; mkdir -p "$ref"
+  cp -R "$REPO/suites/tier-layered-teams/copilot/." "$ref/"
+  out="$(tlt_install "$sb" --harness copilot --scope project)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "same file list as cp -R" 0 "$([[ "$(cd "$sb/cwd" && find . -type f ! -name .ai-personal-install.json | sort)" == "$(cd "$ref" && find . -type f | sort)" ]]; echo $?)"
+  assert_exit "30 files placed" 30 "$(cd "$sb/cwd" && find . -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
+  assert_exit "bytes and exec bits match cp -R" 0 "$(tlt_payload_diff "$sb/cwd" | wc -l | tr -d ' ')"
+  [[ -x "$sb/cwd/.github/skills/astgrep-rewrite/scripts/preview-rewrite.sh" && -x "$sb/cwd/scripts/preflight.sh" ]] && _ok "scripts stay executable" || _fail "scripts stay executable"
+  assert_missing "suite-root docs are not placed" "$sb/cwd/PROTOCOL.md"
+  assert_missing "no suites/ copy under .github" "$sb/cwd/.github/suites"
+  assert_record "record lists all 30 files, hashes match" "$sb/cwd/.github/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 30
+}
+test_tlt_copilot_places_the_cp_r_payload
+
+test_tlt_copilot_second_run_touches_nothing() {
+  _head "a second copilot install leaves everything untouched: per-file skips, one merge summary"
+  local sb out before
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null
+  tlt_install "$sb" --harness copilot --scope project >/dev/null
+  before="$(cd "$sb/cwd" && find . -type f ! -name .ai-personal-install.json -exec shasum {} + | sort)"
+  out="$(tlt_install "$sb" --harness copilot --scope project)"
+  assert_exit "no file changed" 0 "$([[ "$before" == "$(cd "$sb/cwd" && find . -type f ! -name .ai-personal-install.json -exec shasum {} + | sort)" ]]; echo $?)"
+  assert_exit "15 copy files each get a skip note" 15 "$(printf '%s\n' "$out" | grep -c 'skip (exists)')"
+  assert_exit "one merge summary" 1 "$(printf '%s\n' "$out" | grep -c 'left existing')"
+  assert_contains "merge summary names a merge file" "$out" "Makefile"
+  assert_record "record still lists the 30 files, hashes match" "$sb/cwd/.github/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 30
+}
+test_tlt_copilot_second_run_touches_nothing
+
+test_tlt_copilot_user_owned_files_untouched() {
+  _head "a project's own Makefile, .gitignore and .vscode/settings.json are left untouched and listed"
+  local sb out
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; mkdir -p "$sb/cwd/.vscode"
+  printf 'MINE-M\n' > "$sb/cwd/Makefile"; printf 'MINE-G\n' > "$sb/cwd/.gitignore"; printf 'MINE-S\n' > "$sb/cwd/.vscode/settings.json"
+  out="$(tlt_install "$sb" --harness copilot --scope project)"
+  assert_contains "Makefile untouched" "$(cat "$sb/cwd/Makefile")" "MINE-M"
+  assert_contains ".gitignore untouched" "$(cat "$sb/cwd/.gitignore")" "MINE-G"
+  assert_contains "settings.json untouched" "$(cat "$sb/cwd/.vscode/settings.json")" "MINE-S"
+  assert_contains "Makefile listed" "$(printf '%s\n' "$out" | grep -c '^ *Makefile$')" "1"
+  assert_contains ".gitignore listed" "$(printf '%s\n' "$out" | grep -c '^ *\.gitignore$')" "1"
+  assert_contains "settings.json listed" "$(printf '%s\n' "$out" | grep -c '^ *\.vscode/settings\.json$')" "1"
+  assert_exists "the other .vscode files are still created" "$sb/cwd/.vscode/tasks.json"
+  assert_record "record has 27 files; the 3 user files are not in it" "$sb/cwd/.github/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 27
+}
+test_tlt_copilot_user_owned_files_untouched
+
+test_tlt_claude_code_places_plugin_only() {
+  _head "tier-layered-teams on claude-code places the plugin (agents + plugin.json) and no copilot/ variant"
+  local sb out d rec
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; d="$sb/cwd/.claude/suites/tier-layered-teams"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  out="$(tlt_install "$sb" --harness claude-code --scope project)"
+  assert_exit "8 agent files" 8 "$(ls "$d/agents" | wc -l | tr -d ' ')"
+  assert_exists "plugin.json beside agents/" "$d/.claude-plugin/plugin.json"
+  assert_exit "only agents/ and .claude-plugin/ placed" 9 "$(find "$d" -type f | wc -l | tr -d ' ')"
+  assert_missing "no copilot/ directory" "$d/copilot"
+  assert_missing "no claude-code/ directory" "$d/claude-code"
+  assert_missing "suite-root docs not placed" "$d/PROTOCOL.md"
+  assert_missing "no manifest copied" "$d/manifest.json"
+  assert_record "record lists the 9 files, hashes match" "$rec" "$sb/cwd" "$sb/home" 0 9
+  tlt_install "$sb" --harness claude-code --scope project >/dev/null
+  assert_exit "re-install keeps the 9 files" 9 "$(find "$d" -type f | wc -l | tr -d ' ')"
+}
+test_tlt_claude_code_places_plugin_only
+
+test_tlt_claude_code_user_scope() {
+  _head "tier-layered-teams on claude-code user scope lands under ~/.claude/suites"
+  local sb d
+  sb="$(new_sandbox)"; tlt_src "$sb" >/dev/null; d="$sb/home/.claude/suites/tier-layered-teams"
+  tlt_install "$sb" --harness claude-code --scope user >/dev/null
+  assert_exists "agent under ~/.claude" "$d/agents/01-core-orchestrator.md"
+  assert_exists "plugin.json under ~/.claude" "$d/.claude-plugin/plugin.json"
+  assert_missing "cwd untouched" "$sb/cwd/.claude"
+  assert_record "user-scope record matches" "$sb/home/.claude/.ai-personal-install.json" "$sb/cwd" "$sb/home" 0 9
+}
+test_tlt_claude_code_user_scope
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
