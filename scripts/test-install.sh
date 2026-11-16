@@ -1563,6 +1563,24 @@ test_uninstall_keeps_shared_record_and_scope_root() {
   assert_contains "the record is kept, with the other asset" "$(record_json "$rec" 'sorted(d["assets"])')" "['suites/x']"
 }
 
+test_uninstall_file_shared_by_two_uninstalled_assets() {
+  _head "--uninstall with a file two uninstalled assets share"
+  local sb out code d rec share='a=d["assets"]; k=".claude/skills/atomic-commits/SKILL.md"; a["skills/plan-dag"]["files"][k]=a["skills/atomic-commits"]["files"][k]'
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" "$share"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "both removed: exits 0" 0 "$code"
+  assert_missing "both removed: the shared file is gone" "$d/atomic-commits/SKILL.md"
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" "$share"; printf 'edit\n' >> "$d/atomic-commits/USAGE.md"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "one kept as modified: exits 0" 0 "$code"
+  assert_exists "one kept as modified: the file it shares is kept" "$d/atomic-commits/SKILL.md"
+  assert_missing "one kept as modified: the other asset is removed" "$d/plan-dag"
+}
+
 test_uninstall_unlinks_symlink_without_following() {
   _head "--uninstall unlinks a symlink in the way, never its target"
   local sb out code f
@@ -1622,6 +1640,7 @@ test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
 test_uninstall_refuses_bad_or_missing_record
 test_uninstall_keeps_shared_record_and_scope_root
+test_uninstall_file_shared_by_two_uninstalled_assets
 test_uninstall_unlinks_symlink_without_following
 test_uninstall_dry_run_and_flag_conflicts
 test_uninstall_failed_delete_keeps_record_honest

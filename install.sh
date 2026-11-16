@@ -342,7 +342,6 @@ elif mode == "uninstall":
                 sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
             paths[k] = os.path.join(base, t)
     sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]
-    claimed = {real(paths[k]) for a, e in rec["assets"].items() if a not in sel for k in e["files"]}
     def sha(p):
         try:
             with open(p, "rb") as fh:
@@ -360,8 +359,6 @@ elif mode == "uninstall":
                 continue  # already gone: forgotten
             if real(p) in (real(path), root):
                 print(f"  skip    {k} (the install record or the scope root)")
-            elif real(p) in claimed:  # guard 5
-                print(f"  skip    {k} (also claimed by an asset not being uninstalled)")
             elif not (stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)):
                 print(f"  skip    {k} (not a file)")
             else:
@@ -372,16 +369,23 @@ elif mode == "uninstall":
             print(f"  {'force' if force else 'keep'}    {a}, modified: {k}" + ("" if force else " (use --force to delete it)"))
         if not mod or force:
             plan[a] = dele
+    # guard 5: a path of any asset that stays (not selected, or kept as modified) is never deleted
+    claimed = {real(paths[k]) for a, e in rec["assets"].items() if a not in plan for k in e["files"]}
     failed = False
     for a, dele in plan.items():
         left = {}
         for k, p in dele:
+            if real(p) in claimed:
+                print(f"  skip    {k} (also claimed by an asset that stays)")
+                continue
             if dry:
                 print(f"  [dry-run] would remove {k}")
                 continue
             try:
                 os.unlink(p)  # never follows a symlink
                 print(f"  removed {k}")
+            except FileNotFoundError:
+                pass  # shared with an asset removed just before: forgotten
             except OSError as e:
                 print(f"  FAIL    could not remove {k}: {e.strerror}", file=sys.stderr)
                 left[k], failed = rec["assets"][a]["files"][k], True
