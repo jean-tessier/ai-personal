@@ -191,3 +191,5 @@ when combined with `--local`. The other half of that decision still holds: there
 URL-override flag. `fetch_source()` finds the extracted directory with `find`, not by name, so it
 doesn't depend on codeload's `{repo}-{ref}` naming. Tests use the stubbed `curl` (`stub_curl`).
 Users must fetch `install.sh` from the same ref (see README); refs older than this flag don't support it.
+
+**2026-11-15 update**: every real install now writes or merges `<scope root>/.ai-personal-install.json` (`record_write` per placed file, `record_flush` after the copy loop, `_json record` hashes with `hashlib`). It lists each asset's files with sha256 and stores `source.ref` (`null` under `--local`). `--dry-run` and skipped-existing destinations record nothing. Groundwork for `--uninstall`; see [ADR-0012](../adrs/ADR-0012-install-record.md).
