@@ -23,7 +23,7 @@ its design.
 |---|---|
 | Installer entrypoint | `install.sh` (repo root, not `scripts/`) |
 | Harness manifest | `scripts/harnesses.json` — one entry per harness: `label`, `scopes` (scope key → root path), `mapping` (asset category → destination template) |
-| Dependency manifest | `{category}/{name}/dependencies.json` — colocated, one file per asset, optional; flat JSON array of repo-relative paths (e.g. `["skills/create-adr", "skills/yaml-frontmatter"]`); absent means no dependencies. See [ADR-0007](../adrs/ADR-0007-colocated-dependency-manifest.md). |
+| Dependency manifest | `{category}/{name}/dependencies.json` — colocated, one file per asset, optional; flat JSON array of repo-relative paths (e.g. `["skills/create-adr", "skills/yaml-frontmatter"]`); absent means no dependencies. See [ADR-0009](../adrs/ADR-0009-colocated-dependency-manifest.md). |
 | User docs | `README.md`'s `## Installing` section |
 | Structural lint | `scripts/validate.sh`'s `── harnesses ──` section |
 
@@ -118,9 +118,6 @@ flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's dec
   category rather than launching the interactive picker — documented in `README.md`.
 - `copilot` has no `user` scope (`project` → `.github` only) — passing `--scope user --harness
   copilot` fails cleanly (`scope_root` lookup returns nothing → `_fail`), by design.
-- `copilot.mapping` omits `suites` — `suites/{name}/` doesn't map onto Copilot's native
-  layout for this repo's Claude Code-targeted suites; `tiered-escalation-suite` (Copilot-targeted)
-  is a hand-copied drop-in payload instead, not something `install.sh` places.
 
 **2026-07-08 update**: `agents`, `packs`, `tasks`, and `mcp` are no longer asset categories at
 all — `prompts/`, `packs/`, and `tools/` were pruned from the repo (they held only empty
