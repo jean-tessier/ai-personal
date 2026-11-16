@@ -14,6 +14,11 @@ Accepted. This ADR locks in schema shape and vocabulary only — `scripts/catalo
 `suites/tier-layered-teams` has not yet been migrated to use it. Implementation is deferred future
 work, not part of this decision.
 
+**Implementation note (2026-11-16):** the placement engine is implemented for both `copy` and
+`merge` modes (see [ADR-0013](ADR-0013-merge-and-per-file-placement.md) for their per-file
+semantics, which resolves the "merge semantics undecided" point below). The engine is inert until a
+suite carries a `manifest.json`; migrating `suites/tier-layered-teams` is the remaining slice.
+
 ## Context
 
 ADR-0006 (since superseded by ADR-0007 for the copilot-suites premise below) gave multi-harness suites a shape — canonical docs at the suite root, one subdirectory per
