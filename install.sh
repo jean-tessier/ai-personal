@@ -165,28 +165,45 @@ elif mode == "suite_plugin_shaped":
 
 elif mode == "record":
     import datetime, hashlib
-    path, harness, scope, repo, ref, tsv = args
-    rec = {"version": 1, "assets": {}}
+    path, harness, scope, repo, ref, tsv, cwd, home = args
+    def bad(why):
+        sys.exit(f"install record {path}: {why}")
+    rec = {"version": 1, "harness": harness, "scope": scope, "assets": {}}
     if os.path.exists(path):
-        rec = load(path)
-        if rec.get("version") != 1:
-            sys.exit(f"unsupported install record version in {path}")
-    rec.update(harness=harness, scope=scope, source={"repo": repo, "ref": ref or None})
-    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            rec = load(path)
+        except ValueError as e:
+            bad(f"not valid JSON ({e})")
+        if not isinstance(rec, dict) or rec.get("version") != 1:
+            bad("not a version-1 install record")
+        if not isinstance(rec.get("assets"), dict) or not all(
+                isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
+            bad("malformed assets")
+        if (rec.get("harness"), rec.get("scope")) != (harness, scope):
+            sys.exit(f"install record {path} belongs to {rec.get('harness')}/{rec.get('scope')}, not {harness}/{scope}")
     with open(tsv) as f:
         rows = [line.rstrip("\n").split("\t") for line in f]
-    for asset, spec, abspath in rows:
-        placed = [(spec, abspath)] if os.path.isfile(abspath) else [
-            (spec + "/" + os.path.relpath(os.path.join(d, n), abspath).replace(os.sep, "/"), os.path.join(d, n))
-            for d, _, names in os.walk(abspath) for n in names]
-        entry = rec["assets"].setdefault(asset, {"files": {}})
-        entry["installedAt"] = now
-        for key, file in placed:
-            with open(file, "rb") as fh:
-                entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
-    with open(path, "w") as f:
-        json.dump(rec, f, indent=2, sort_keys=True)
-        f.write("\n")
+    if rows:
+        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        rec["source"] = {"repo": repo, "ref": ref or None}
+        for asset, spec in rows:
+            p = os.path.join(home, spec[2:]) if spec.startswith("~/") else os.path.join(cwd, spec)
+            if not os.path.exists(p):
+                sys.exit(f"install record: placed path missing: {p}")
+            placed = [(spec, p)] if os.path.isfile(p) else [
+                (spec + "/" + os.path.relpath(os.path.join(d, n), p).replace(os.sep, "/"), os.path.join(d, n))
+                for d, _, names in os.walk(p) for n in names]
+            entry = rec["assets"].setdefault(asset, {"files": {}})
+            entry.update(installedAt=now, ref=ref or None)
+            for k in [k for k in entry["files"] if k == spec or k.startswith(spec + "/")]:
+                del entry["files"][k]
+            for key, file in placed:
+                with open(file, "rb") as fh:
+                    entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+        with open(path + ".tmp", "w") as f:
+            json.dump(rec, f, indent=2, sort_keys=True)
+            f.write("\n")
+        os.replace(path + ".tmp", path)
 
 else:
     sys.exit(f"unknown mode: {mode}")
@@ -568,18 +585,23 @@ resolve_root() {
 }
 
 # ── Install record (ADR-0012) ───────────────────────────────────────────────
-# Every write path calls record_write; record_flush then hashes what was placed
-# and merges it into <scope root>/.ai-personal-install.json. Dry runs never call
-# record_write, so they write no record.
+# Every write path calls record_write, which logs the placed asset and merges it
+# into <scope root>/.ai-personal-install.json at once, so a later failure never
+# leaves placed files unrecorded. Dry runs never call it, so they write no record.
 RECORD_TSV="$WORK/record.tsv"
 
-# record_write <asset> <dest_spec>: log one placed file or directory.
-record_write() { printf '%s\t%s\t%s\n' "$1" "$2" "$(resolve_root "$2")" >> "$RECORD_TSV"; }
-
+# record_flush [<rows_file>]: validate the record and merge the rows in (default: $RECORD_TSV).
 record_flush() {
-  [[ -s "$RECORD_TSV" ]] || return 0
+  local ref=""
+  [[ -n "$LOCAL_PATH" ]] || ref="$REF"
   _json record "$(resolve_root "${SCOPE_ROOT:+$SCOPE_ROOT/}.ai-personal-install.json")" \
-    "$HARNESS" "$SCOPE" "$OWNER/$REPO_NAME" "$([[ -n "$LOCAL_PATH" ]] || printf '%s' "$REF")" "$RECORD_TSV"
+    "$HARNESS" "$SCOPE" "$OWNER/$REPO_NAME" "$ref" "${1:-$RECORD_TSV}" "$PWD" "$HOME"
+}
+
+# record_write <asset> <dest_spec>: log one placed file or directory, then flush.
+record_write() {
+  printf '%s\t%s\n' "$1" "$2" > "$RECORD_TSV"
+  record_flush
 }
 
 # ── Copy (or report, in --dry-run) ──────────────────────────────────────────
@@ -591,6 +613,8 @@ apply_selection() {
 
   _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run" || echo "installing")"
   local asset src_rel dest_spec mode transform category src dest
+  # a bad existing record must stop the install before any file is copied
+  [[ $DRY_RUN -eq 1 ]] || record_flush /dev/null
   while IFS=$'\t' read -r asset src_rel dest_spec mode transform; do
     category="${asset%%/*}"
     src="$SRC/$src_rel"
@@ -622,7 +646,6 @@ apply_selection() {
     record_write "$asset" "$dest_spec"
     _ok "${dest_spec#"$SCOPE_ROOT"/}"
   done < "$SELECTION_FILE"
-  record_flush
 }
 
 main() {

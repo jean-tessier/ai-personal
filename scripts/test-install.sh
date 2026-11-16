@@ -665,8 +665,23 @@ PY
   python3 -c "$py" "$@"
 }
 
+# assert_record <desc> <record> <cwd> <home> <expected mismatches> [expected file count]:
+# the record parses, has the expected mismatches, and lists at least one file (or exactly N).
+assert_record() {
+  local desc="$1" got n bad
+  got="$(record_check "$2" "$3" "$4" 2>&1)"; n="${got% *}"; bad="${got#* }"
+  [[ "$bad" == "$5" && "$n" -gt 0 && "$n" == "${6:-$n}" ]] && _ok "$desc" || _fail "$desc (files/mismatches: $got)"
+}
+
 # record_json <record> <python expr on d>: prints the expression's value.
 record_json() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$@"; }
+
+# record_mode <args...>: runs install.sh's own python `record` mode directly.
+record_mode() {
+  local py
+  py="$(awk '/python3 - "\$@" <<.PY.$/{f=1;next} /^PY$/{f=0} f' "$INSTALL")"
+  python3 -c "$py" record "$@"
+}
 
 test_record_lists_every_copied_file() {
   _head "install record lists every copied file with its sha256"
@@ -674,8 +689,9 @@ test_record_lists_every_copied_file() {
   sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
   assert_exists "record written under the scope root" "$rec"
+  assert_missing "no temp file left behind" "$rec.tmp"
   on_disk="$(cd "$sb/cwd" && find .claude -type f ! -name .ai-personal-install.json | wc -l | tr -d ' ')"
-  assert_contains "valid JSON, all hashes match, every file on disk recorded" "$(record_check "$rec" "$sb/cwd" "$sb/home")" "$on_disk 0"
+  assert_record "valid JSON, all hashes match, every file on disk recorded" "$rec" "$sb/cwd" "$sb/home" 0 "$on_disk"
   assert_contains "paths are root-anchored" "$(record_json "$rec" 'sorted(d["assets"]["skills/atomic-commits"]["files"])[0]')" ".claude/skills/atomic-commits/"
   assert_contains "records harness and scope" "$(record_json "$rec" 'd["harness"], d["scope"], d["version"]')" "('claude-code', 'project', 1)"
 }
@@ -685,7 +701,7 @@ test_record_covers_copilot_translation_and_dependencies() {
   local sb rec
   sb="$(new_sandbox)"; rec="$sb/cwd/.github/.ai-personal-install.json"
   run_install "$sb" --harness copilot --scope project --assets suites --yes-deps </dev/null >/dev/null 2>&1
-  assert_contains "translated files hash as placed" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 0"
+  assert_record "translated files hash as placed" "$rec" "$sb/cwd" "$sb/home" 0
   assert_contains "a translated plugin.json is recorded" "$(record_json "$rec" '[k for a in d["assets"].values() for k in a["files"] if k.endswith("/plugin.json")]')" "/plugin.json"
   assert_contains "a dependency is recorded as its own asset" "$(record_json "$rec" 'sorted(d["assets"])')" "'skills/"
 }
@@ -695,11 +711,12 @@ test_record_merges_on_reinstall() {
   local sb rec
   sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
-  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["assets"]["skills/earlier"]={"installedAt":"x","files":{".claude/skills/earlier/SKILL.md":"sha256:0"}}; d["assets"]["skills/atomic-commits"]["installedAt"]="x"; json.dump(d,open(p,"w"))' "$rec"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); a=d["assets"]; a["skills/earlier"]={"installedAt":"x","files":{".claude/skills/earlier/SKILL.md":"sha256:0"}}; a["skills/atomic-commits"]["installedAt"]="x"; a["skills/atomic-commits"]["files"][".claude/skills/atomic-commits/GONE.md"]="sha256:0"; json.dump(d,open(p,"w"))' "$rec"
   run_install "$sb" --harness claude-code --scope project --assets skills --force </dev/null >/dev/null 2>&1
   assert_contains "earlier asset survives" "$(record_json "$rec" '"skills/earlier" in d["assets"]')" "True"
   assert_contains "re-installed asset is refreshed" "$(record_json "$rec" 'd["assets"]["skills/atomic-commits"]["installedAt"] != "x"')" "True"
-  assert_contains "only the stale entry fails its hash check" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 1"
+  assert_contains "a file the new version no longer ships is dropped" "$(record_json "$rec" '".claude/skills/atomic-commits/GONE.md" in d["assets"]["skills/atomic-commits"]["files"]')" "False"
+  assert_record "only the planted entry of the other asset fails its hash check" "$rec" "$sb/cwd" "$sb/home" 1
 }
 
 test_record_skipped_files_not_recorded_and_dry_run_writes_none() {
@@ -727,6 +744,19 @@ test_record_source_ref() {
   assert_contains "--local records ref null" "$(record_json "$sb/cwd/.claude/.ai-personal-install.json" 'd["source"]')" "'ref': None"
 }
 
+test_record_ref_per_asset() {
+  _head "install record keeps each asset's own ref across installs"
+  local sb rec
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  stub_curl "$sb" ai-personal-1
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills --ref v1 </dev/null >/dev/null 2>&1 )
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  assert_contains "the first install's asset keeps ref v1" "$(record_json "$rec" 'd["assets"]["skills/demo"]["ref"]')" "v1"
+  assert_contains "the second install's asset has ref null" "$(record_json "$rec" 'd["assets"]["skills/atomic-commits"]["ref"]')" "None"
+  assert_contains "top-level source.ref is the last install's" "$(record_json "$rec" 'd["source"]["ref"]')" "None"
+}
+
 test_record_user_scope_root() {
   _head "install record for user scope lives under the user root"
   local sb rec
@@ -734,8 +764,84 @@ test_record_user_scope_root() {
   run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
   assert_exists "record under \$HOME/.claude" "$rec"
   assert_missing "cwd untouched" "$sb/cwd/.claude"
-  assert_contains "paths are ~-anchored and match on disk" "$(record_check "$rec" "$sb/cwd" "$sb/home")" " 0"
+  assert_record "paths are ~-anchored and match on disk" "$rec" "$sb/cwd" "$sb/home" 0
   assert_contains "keys start with ~/.claude/" "$(record_json "$rec" 'sorted(d["assets"]["skills/atomic-commits"]["files"])[0]')" "~/.claude/skills/"
+}
+
+test_record_bad_record_stops_before_any_copy() {
+  _head "an unusable install record stops the install before any file is copied"
+  local sb out code bad
+  sb="$(new_sandbox)"
+  mkdir -p "$sb/cwd/.claude"; printf '{"version":2,"assets":{}}' > "$sb/cwd/.claude/.ai-personal-install.json"
+  cp "$sb/cwd/.claude/.ai-personal-install.json" "$sb/before.json"
+  out="$(run_install "$sb" --harness claude-code --scope project --assets skills </dev/null 2>&1)"; code=$?
+  assert_exit "unknown version: exits 1" 1 "$code"
+  assert_contains "unknown version: says why" "$out" "install record"
+  assert_missing "unknown version: nothing placed" "$sb/cwd/.claude/skills"
+  cmp -s "$sb/before.json" "$sb/cwd/.claude/.ai-personal-install.json" \
+    && _ok "unknown version: record untouched" || _fail "unknown version: record untouched"
+  for bad in '{bad' '[]' '{"version":1,"assets":[]}' '{"version":1,"harness":"claude-code","scope":"project","assets":{"skills/x":{"files":[]}}}'; do
+    sb="$(new_sandbox)"
+    mkdir -p "$sb/cwd/.claude"; printf '%s' "$bad" > "$sb/cwd/.claude/.ai-personal-install.json"
+    out="$(run_install "$sb" --harness claude-code --scope project --assets skills </dev/null 2>&1)"; code=$?
+    assert_exit "record '$bad': exits 1" 1 "$code"
+    assert_contains "record '$bad': clean message" "$out" "install record"
+    assert_not_contains "record '$bad': no traceback" "$out" "Traceback"
+    assert_missing "record '$bad': nothing placed" "$sb/cwd/.claude/skills"
+  done
+}
+
+test_record_other_harness_or_scope_refused() {
+  _head "a record belonging to another scope is refused, not rewritten"
+  local sb out code rec
+  sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
+  # project scope run from $HOME resolves to the same record file as user scope
+  ( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  rm -rf "$sb/home/.claude/skills/atomic-commits"
+  out="$(run_install "$sb" --harness claude-code --scope user --assets skills </dev/null 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "names both scopes" "$out" "belongs to claude-code/project, not claude-code/user"
+  assert_contains "record still says project" "$(record_json "$rec" 'd["scope"]')" "project"
+  assert_missing "the second run placed nothing" "$sb/home/.claude/skills/atomic-commits"
+}
+
+test_record_survives_midway_failure() {
+  _head "a failure part-way through still records the files placed before it"
+  local sb rec code
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block rm"; return; fi
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/.claude/skills/plan-dag/sub"; : > "$sb/cwd/.claude/skills/plan-dag/sub/f"
+  chmod 555 "$sb/cwd/.claude/skills/plan-dag/sub"
+  run_install "$sb" --harness claude-code --scope project --assets skills --force </dev/null >/dev/null 2>&1; code=$?
+  chmod -R u+w "$sb/cwd/.claude"
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "an earlier skill is recorded" "$(record_json "$rec" '"skills/atomic-commits" in d["assets"]')" "True"
+  assert_contains "the failed skill is not" "$(record_json "$rec" '"skills/plan-dag" in d["assets"]')" "False"
+  assert_record "recorded files match" "$rec" "$sb/cwd" "$sb/home" 0
+}
+
+test_record_mode_rejects_missing_placed_path() {
+  _head "record mode fails on a placed path that does not exist"
+  local sb out code
+  sb="$(new_sandbox)"
+  printf 'skills/x\t.claude/skills/x\n' > "$sb/rows.tsv"
+  out="$(record_mode "$sb/rec.json" claude-code project o/r main "$sb/rows.tsv" "$sb/cwd" "$sb/home" 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "says which path" "$out" "placed path missing"
+  assert_missing "no record written" "$sb/rec.json"
+}
+
+test_validate_rejects_symlinks_in_assets() {
+  _head "validate.sh rejects a symlink inside skills/ or suites/"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$sb/fake_src"
+  mkdir -p "$src"
+  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  ln -s x "$src/skills/atomic-commits/l"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "names the symlink" "$out" "symlink"
 }
 
 test_record_lists_every_copied_file
@@ -743,7 +849,13 @@ test_record_covers_copilot_translation_and_dependencies
 test_record_merges_on_reinstall
 test_record_skipped_files_not_recorded_and_dry_run_writes_none
 test_record_source_ref
+test_record_ref_per_asset
 test_record_user_scope_root
+test_record_bad_record_stops_before_any_copy
+test_record_other_harness_or_scope_refused
+test_record_survives_midway_failure
+test_record_mode_rejects_missing_placed_path
+test_validate_rejects_symlinks_in_assets
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
