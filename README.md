@@ -53,7 +53,7 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
 | `--ref <ref>` | tag, branch, or commit sha to fetch (default: `main`); see the note below |
 | `--dry-run` | print planned copy operations; write nothing |
-| `--force` | overwrite existing destination files/dirs (default: skip existing) |
+| `--force` | overwrite existing destination files/dirs (default: skip existing). With `--harness copilot` this includes project-root files placed by a manifest suite (`tier-layered-teams`: `Makefile`, `.gitignore`, `.vscode/*`, `scripts/*`, `copilot-instructions.md`); preview with `--dry-run --force`, or pass `--assets skills` to refresh skills only. |
 | `--yes-deps` | add declared dependencies without prompting (see below) |
 | `--no-deps` | skip declared dependencies instead of adding or prompting; can't be combined with `--yes-deps` |
 | `-h`, `--help` | show usage |
@@ -95,12 +95,17 @@ Claude Code/Copilot plugins — see
 - **Translates plugin-shaped suites for `--harness copilot`**: `agents/*.md` →
   `agents/*.agent.md`, and `.claude-plugin/plugin.json` moves to a root `plugin.json` —
   Copilot's own manifest location, per GitHub's docs. A suite without a
-  `.claude-plugin/plugin.json` at its root — a drop-in Copilot payload like
-  `suites/tiered-escalation-suite/`, or `suites/tier-layered-teams/copilot/` (which
-  already ships its own hand-authored Copilot form) — has no translated form and is
-  skipped for `copilot` with a one-line notice. `suites/tiered-escalation-suite/` is a
-  drop-in payload you copy by hand instead (see its own
+  `.claude-plugin/plugin.json` at its root and without a `manifest.json` — a drop-in
+  Copilot payload like `suites/tiered-escalation-suite/` — has no translated form and is
+  skipped for `copilot` with a one-line notice; you copy it by hand instead (see its own
   [USAGE.md](suites/tiered-escalation-suite/USAGE.md)).
+- **Places manifest suites per file**: a suite with a `manifest.json`
+  ([ADR-0008](docs/adrs/ADR-0008-suite-manifest-resource-kind-placements.md)) installs only
+  the chosen harness's variant, file by file, and never installs its root docs.
+  `suites/tier-layered-teams/` works this way: `--harness copilot` with suites selected (including the default all-categories run) writes its
+  payload into the project root (`Makefile`, `scripts/`, `.vscode/`, ...), creating missing files
+  and leaving existing ones alone (`--force` overwrites them); see the suite's
+  [USAGE.md](suites/tier-layered-teams/USAGE.md) for the known limitations.
 
 This repo's root `.claude-plugin/marketplace.json` also makes it directly installable
 via `/plugin marketplace add jean-tessier/ai-personal` in Claude Code, alongside (not

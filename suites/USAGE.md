@@ -36,8 +36,9 @@ holds the reusable instructions, not the output artifacts. `tiered-escalation-su
 different: its payload is *copied wholesale* into a target project's root and
 never read in place by Claude Code (it's Copilot/VS Code-native). `tier-layered-teams` is both:
 its `claude-code/` variant is dispatched and produces/consumes files in a target project like the
-others, while its `copilot/` variant is a drop-in payload copied wholesale, same as
-`tiered-escalation-suite`.
+others, while its `copilot/` variant is a drop-in payload that `install.sh` places per file into the
+target project's root through the suite's `manifest.json` (unlike `tiered-escalation-suite`,
+which is copied by hand).
 
 ## Asset index
 

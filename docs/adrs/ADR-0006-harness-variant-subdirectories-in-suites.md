@@ -19,6 +19,12 @@ copilot-mapping premise below is outdated. `suites/tier-layered-teams/copilot/` 
 manual `cp -R` payload either way, now because it isn't plugin-shaped rather than because
 no mapping exists for `copilot` at all.
 
+**Update (2026-11-16):** the `install.sh` limitations stated below no longer hold for
+`tier-layered-teams`: it now has a `manifest.json` ([ADR-0008](ADR-0008-suite-manifest-resource-kind-placements.md),
+[ADR-0013](ADR-0013-merge-and-per-file-placement.md)), so `install.sh` places only the chosen
+harness's variant (no `copilot/` dead weight on claude-code) and installs the `copilot/` payload per
+file instead of a manual `cp -R`. The body below is left as the original record.
+
 ## Context
 
 Every suite in `suites/` has, until now, targeted exactly one harness: `hub-and-spoke-orchestration`

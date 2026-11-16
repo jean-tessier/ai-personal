@@ -15,6 +15,10 @@ Dependency half superseded by ADR-0009. The gate that decides when the Copilot t
 (a hardcoded harness check in `install.sh`) is superseded by [ADR-0011](ADR-0011-translate-transforms-as-harness-data.md),
 which moves it into `harnesses.json` as `translate` data; the translation itself is unchanged.
 
+`suites/tier-layered-teams/copilot/` is no longer manual: since 2026-11-16 `install.sh` places it
+through the suite's `manifest.json` ([ADR-0008](ADR-0008-suite-manifest-resource-kind-placements.md));
+it is still outside the plugin model.
+
 ## Context
 
 Two gaps existed in this repo's asset model:

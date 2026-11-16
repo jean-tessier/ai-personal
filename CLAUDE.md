@@ -108,9 +108,11 @@ mapping only reaches suites `scripts/catalog.sh` marks `pluginShaped` (a root
 rest out per-item with a one-line notice, same compatibility-by-omission spirit applied at item
 instead of category granularity. Eligible suites are mechanically rewritten by
 `translate_to_copilot()` (`agents/*.md` → `agents/*.agent.md`, `.claude-plugin/plugin.json` →
-a root `plugin.json`). Drop-in Copilot payloads (`suites/tiered-escalation-suite/`,
-`suites/tier-layered-teams/copilot/`) aren't plugin-shaped and stay permanently unreachable
-through this path — they're deployed by hand instead (see each suite's own `USAGE.md`).
+a root `plugin.json`). A drop-in Copilot payload without a `manifest.json` (`suites/tiered-escalation-suite/`) isn't
+plugin-shaped and stays unreachable through this path — it's deployed by hand (see its own
+`USAGE.md`). `suites/tier-layered-teams/` has a `manifest.json` (ADR-0008, ADR-0013), so
+`install.sh` places its `claude-code/` or `copilot/` variant per file instead, and its copilot
+payload merges into the project root (existing files are never overwritten without `--force`).
 
 ### This repo's own dogfood skill install
 

@@ -1,0 +1,17 @@
+{
+  "claude-code": [
+    { "kind": "agents", "src": "claude-code/agents",         "mode": "copy" },
+    { "kind": "config", "src": "claude-code/.claude-plugin", "mode": "copy" }
+  ],
+  "copilot": [
+    { "kind": "agents",       "src": "copilot/.github/agents",                  "mode": "copy"  },
+    { "kind": "skills",       "src": "copilot/.github/skills",                  "mode": "copy"  },
+    { "kind": "instructions", "src": "copilot/.github/copilot-instructions.md", "mode": "merge" },
+    { "kind": "hooks",        "src": "copilot/.github/hooks",                   "mode": "copy"  },
+    { "kind": "config",       "src": "copilot/.vscode",                         "mode": "merge" },
+    { "kind": "config",       "src": "copilot/Makefile",                        "mode": "merge" },
+    { "kind": "config",       "src": "copilot/scripts",                         "mode": "merge" },
+    { "kind": "config",       "src": "copilot/.gitignore",                      "mode": "merge" },
+    { "kind": "config",       "src": "copilot/scratch",                         "mode": "merge" }
+  ]
+}
