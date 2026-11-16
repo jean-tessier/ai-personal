@@ -347,9 +347,12 @@ elif mode == "uninstall":
         except OSError:
             return None
     own, stops = {ident(path), ident(root)}, {ident(root), ident(base), ident(cwd), ident(home)} - {None}
-    def sha(p):
+    def sha(p):  # never blocks on a FIFO, never follows a link, hashes only a regular file
         try:
-            with open(p, "rb") as fh:
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+            with os.fdopen(fd, "rb") as fh:
+                if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    return None
                 return "sha256:" + hashlib.sha256(fh.read()).hexdigest()
         except OSError:
             return None

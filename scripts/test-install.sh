@@ -1523,8 +1523,11 @@ test_uninstall_keeps_modified_asset_and_user_files() {
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
   printf 'edit\n' >> "$d/atomic-commits/SKILL.md"
   printf 'mine\n' > "$d/plan-dag/MINE.md"
+  printf 'PRECIOUS\n' > "$sb/precious"; ln -s "$sb/precious" "$rec.tmp"   # a planted temp link is never followed
   out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
   assert_exit "exits 0" 0 "$code"
+  assert_contains "the planted temp link's target is untouched" "$(cat "$sb/precious")" "PRECIOUS"
+  assert_missing "the record is rewritten through a fresh temp file" "$rec.tmp"
   assert_contains "names the modified file" "$out" "modified: .claude/skills/atomic-commits/SKILL.md"
   assert_exists "the modified file is kept" "$d/atomic-commits/SKILL.md"
   assert_exists "the rest of that asset is kept too" "$d/atomic-commits/USAGE.md"
@@ -1611,6 +1614,7 @@ test_uninstall_keeps_shared_record_and_scope_root() {
   assert_missing "the rest of that asset is removed" "$d/atomic-commits/USAGE.md"
   assert_missing "a skill listing the record and scope root is still removed" "$d/plan-dag"
   [[ -L "$sb/cwd/.claude" ]] && _ok "the scope root symlink is kept" || _fail "the scope root symlink is kept"
+  assert_not_contains "the record file itself is never deleted" "$out" "removed .claude/.ai-personal-install.json"
   assert_contains "the record is kept, with the other asset" "$(record_json "$rec" 'sorted(d["assets"])')" "['suites/x']"
 }
 
@@ -1658,6 +1662,21 @@ test_uninstall_prune_stops_at_symlinked_dir() {
     && _ok "the symlinked dir and its target stay" || _fail "the symlinked dir and its target stay"
 }
 
+test_uninstall_skips_what_is_not_a_file() {
+  _head "--uninstall never opens or deletes a FIFO or directory at a recorded path"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills/atomic-commits"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  mkfifo "$d/fifo"; mkdir "$d/dir"; ln -s fifo "$d/lnk"
+  rec_edit "$rec" 'f=d["assets"]["skills/atomic-commits"]["files"]; f.update({".claude/skills/atomic-commits/"+n:"sha256:0" for n in ("fifo","dir","lnk")})'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "the FIFO is not a file" "$out" "atomic-commits/fifo (not a file)"
+  assert_contains "the directory is not a file" "$out" "atomic-commits/dir (not a file)"
+  [[ -p "$d/fifo" && -d "$d/dir" ]] && _ok "both are kept" || _fail "both are kept"
+  [[ ! -L "$d/lnk" ]] && _ok "--force: the symlink to the FIFO is unlinked" || _fail "--force: the symlink to the FIFO is unlinked"
+}
+
 test_uninstall_unlinks_symlink_without_following() {
   _head "--uninstall unlinks a symlink in the way, never its target"
   local sb out code f
@@ -1679,6 +1698,7 @@ test_uninstall_dry_run_and_flag_conflicts() {
   sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
   printf 'edit\n' >> "$sb/cwd/.claude/skills/atomic-commits/SKILL.md"
+  rec_edit "$rec" 'pass'   # compact JSON, so any rewrite shows up in cmp
   cp "$rec" "$sb/before.json"; n="$(count_files "$sb/cwd")"
   for f in "" --force; do
     out="$(run_uninstall "$sb" --harness claude-code --scope project --dry-run $f </dev/null 2>&1)"; code=$?
@@ -1721,6 +1741,7 @@ test_uninstall_keeps_shared_record_and_scope_root
 test_uninstall_file_shared_by_two_uninstalled_assets
 test_uninstall_compares_files_not_spellings
 test_uninstall_prune_stops_at_symlinked_dir
+test_uninstall_skips_what_is_not_a_file
 test_uninstall_unlinks_symlink_without_following
 test_uninstall_dry_run_and_flag_conflicts
 test_uninstall_failed_delete_keeps_record_honest
