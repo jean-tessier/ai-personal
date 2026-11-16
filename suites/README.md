@@ -70,10 +70,11 @@ Kebab-case, describing the orchestration pattern: `hub-and-spoke-orchestration`.
 A suite whose shape already fits Claude Code's/Copilot's native plugin schema (plain
 `agents/*.md`, or per-skill directories directly containing `SKILL.md`) carries a root
 `.claude-plugin/plugin.json` and is listed in the repo-root
-`.claude-plugin/marketplace.json`. That earns it two things from `install.sh`: any
-skill dependency it declares gets auto-installed alongside it, and `--harness copilot`
-gets a mechanically-translated Copilot-native copy (`agents/*.md` → `agents/*.agent.md`,
-manifest relocated to a root `plugin.json`) instead of being skipped.
+`.claude-plugin/marketplace.json`. That earns it a mechanically-translated Copilot-native
+copy from `install.sh` under `--harness copilot` (`agents/*.md` → `agents/*.agent.md`,
+manifest relocated to a root `plugin.json`) instead of being skipped. Dependency
+auto-include is separate: any suite or skill with a `dependencies.json` gets it
+([ADR-0009](../docs/adrs/ADR-0009-colocated-dependency-manifest.md)).
 
 A suite that's a **drop-in payload** for a *different* target project — its own
 `.github/`, `.vscode/`, `Makefile`, and `scripts/*.sh` working together, deployed by
