@@ -1445,10 +1445,10 @@ test_tlt_force_restores_exec_bit() {
 test_tlt_force_restores_exec_bit
 
 # ── --uninstall (ADR-0012 "Consumers MUST") ─────────────────────────────────────
-# run_uninstall <sandbox> <args...>: --uninstall with no --local (it must never fetch).
+# run_uninstall <sandbox> <args...>: --uninstall against this checkout (--local, never the network).
 run_uninstall() {
   local sandbox="$1"; shift
-  ( cd "$sandbox/cwd" && HOME="$sandbox/home" PATH="$sandbox/bin:$PATH" bash "$INSTALL" --uninstall "$@" )
+  ( cd "$sandbox/cwd" && HOME="$sandbox/home" PATH="$sandbox/bin:$PATH" bash "$INSTALL" --local "$REPO" --uninstall "$@" )
 }
 # count_files <dir>: regular files and symlinks under <dir>.
 count_files() { find "$1" \( -type f -o -type l \) 2>/dev/null | wc -l | tr -d ' '; }
@@ -1463,14 +1463,57 @@ test_uninstall_round_trip() {
     sb="$(new_sandbox)"
     run_install "$sb" --harness "$h" --scope "$s" --yes-deps </dev/null >/dev/null 2>&1
     rm "$(find "$sb/$base" -name USAGE.md | head -1)"   # already gone: forgotten, not an error
-    stub_curl "$sb"
-    out="$(run_uninstall "$sb" --harness "$h" --scope "$s" </dev/null 2>&1)"; code=$?
+    stub_curl "$sb"   # uninstall fetches harnesses.json like install, so --ref is allowed
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --uninstall --harness "$h" --scope "$s" --ref v1 </dev/null 2>&1 )"; code=$?
     assert_exit "$h/$s: exits 0" 0 "$code"
     assert_contains "$h/$s: lists what it removed" "$out" "removed"
     assert_exit "$h/$s: no file left" 0 "$(count_files "$sb/$base")"
     assert_exit "$h/$s: empty dirs pruned up to the scope root, which stays" 1 "$(find "$sb/$base" -mindepth 1 -type d | wc -l | tr -d ' ')"
-    assert_missing "$h/$s: no network fetch" "$sb/curl.args"
+    assert_contains "$h/$s: fetched the pinned tree (stubbed curl)" "$(cat "$sb/curl.args" 2>&1)" "codeload.github.com/jean-tessier/ai-personal/tar.gz/v1"
   done
+}
+
+test_uninstall_reads_only_the_scope_root_record() {
+  _head "--uninstall reads only <scope root>/.ai-personal-install.json"
+  local sb out code n rec
+  # a user-scope record one level below \$HOME is not the scope root's record
+  sb="$(new_sandbox)"; printf 'mine\n' > "$sb/home/victim"; mkdir "$sb/home/cloned"
+  python3 -c 'import hashlib,json,sys; h=hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest(); json.dump({"version":1,"harness":"claude-code","scope":"user","assets":{"skills/x":{"files":{"~/victim":"sha256:"+h}}}},open(sys.argv[2],"w"))' \
+    "$sb/home/victim" "$sb/home/cloned/.ai-personal-install.json"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "no record at the scope root: exits 0" 0 "$code"
+  assert_contains "no record at the scope root: says so" "$out" "no install record at"
+  assert_exists "a record elsewhere under \$HOME is not used" "$sb/home/victim"
+  # a symlink to a sibling project's scope root is never followed out of \$PWD
+  sb="$(new_sandbox)"; mkdir "$sb/other"
+  ( cd "$sb/other" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  n="$(count_files "$sb/other")"
+  ln -s ../other/.claude "$sb/cwd/evil"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "sibling via another name: exits 0" 0 "$code"
+  assert_exit "sibling via another name: nothing deleted outside \$PWD" "$n" "$(count_files "$sb/other")"
+  rm "$sb/cwd/evil"; ln -s ../other/.claude "$sb/cwd/.claude"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "sibling as the scope root: exits 1" 1 "$code"
+  assert_contains "sibling as the scope root: says why" "$out" "outside"
+  assert_exit "sibling as the scope root: nothing deleted outside \$PWD" "$n" "$(count_files "$sb/other")"
+  # a corrupt real record is refused even when another record exists; a valid one ignores the other
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  mkdir "$sb/cwd/vendor"; cp "$rec" "$sb/cwd/vendor/.ai-personal-install.json"; cp "$rec" "$sb/good.json"
+  { printf '<<<<<<< HEAD\n'; cat "$sb/good.json"; } > "$rec"
+  n="$(count_files "$sb/cwd")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "corrupt record: exits 1" 1 "$code"
+  assert_contains "corrupt record: says why" "$out" "not valid JSON"
+  assert_exit "corrupt record: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+  cp "$sb/good.json" "$rec"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "second record elsewhere: exits 0" 0 "$code"
+  assert_exit "second record elsewhere: everything installed removed, that record kept" 1 "$(count_files "$sb/cwd")"
+  cmp -s "$sb/good.json" "$sb/cwd/vendor/.ai-personal-install.json" && _ok "second record elsewhere: untouched" || _fail "second record elsewhere: untouched"
 }
 
 test_uninstall_keeps_modified_asset_and_user_files() {
@@ -1527,8 +1570,8 @@ test_uninstall_refuses_bad_or_missing_record() {
   local sb out code n bad
   sb="$(new_sandbox)"
   out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
-  assert_exit "no record: exits 1" 1 "$code"
-  assert_contains "no record: says so" "$out" "no install record"
+  assert_exit "no record: exits 0" 0 "$code"
+  assert_contains "no record: says so" "$out" "no install record at"
   # project scope run from $HOME writes the record --scope user would read
   ( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
     bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
@@ -1611,7 +1654,7 @@ test_uninstall_dry_run_and_flag_conflicts() {
     assert_exit "--dry-run $f: nothing deleted" "$n" "$(count_files "$sb/cwd")"
     cmp -s "$sb/before.json" "$rec" && _ok "--dry-run $f: record untouched" || _fail "--dry-run $f: record untouched"
   done
-  for f in "--ref v1" "--local $REPO" --yes-deps --no-deps; do
+  for f in --yes-deps --no-deps; do
     out="$(run_uninstall "$sb" --harness claude-code --scope project $f </dev/null 2>&1)"; code=$?
     assert_exit "$f: exits 1" 1 "$code"
     assert_contains "$f: explains the conflict" "$out" "cannot be combined with --uninstall"
@@ -1636,6 +1679,7 @@ test_uninstall_failed_delete_keeps_record_honest() {
 }
 
 test_uninstall_round_trip
+test_uninstall_reads_only_the_scope_root_record
 test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
 test_uninstall_refuses_bad_or_missing_record

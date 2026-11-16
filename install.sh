@@ -308,29 +308,22 @@ elif mode == "record":
 elif mode == "uninstall":
     # The record is user-editable, so it is untrusted: every check runs before any delete.
     import hashlib, stat
-    harness, scope, cwd, home, dry, force, cats = args
-    dry, force, cats, user = dry == "1", force == "1", cats.split(), scope == "user"
+    spec, harness, scope, cwd, home, dry, force, cats = args
+    dry, force, cats, user = dry == "1", force == "1", cats.split(), spec.startswith("~/")
     base = home if user else cwd
     real = os.path.realpath
+    bb = real(base)
     def entry(q):  # q's directory entry: real parent + own name (a final symlink is not followed)
         return os.path.join(real(os.path.dirname(q)), os.path.basename(q))
-    def owner(q):
-        try:
-            r = load(q)
-            return (r.get("harness"), r.get("scope"))
-        except Exception:
-            return None
-    # ponytail: no fetch, so no harnesses.json: look for the record in the project root
-    # (or $HOME) and one level below, where every scope root sits today. A deeper scope
-    # root would need harnesses.json here.
-    found = sorted({entry(q) for d in [base] + [os.path.join(base, n) for n in os.listdir(base)]
-                    for q in [os.path.join(d, ".ai-personal-install.json")] if os.path.isfile(q)})
-    mine = [q for q in found if owner(q) == (harness, scope)] or found
-    if len(mine) != 1:
-        sys.exit(f"no install record for {harness}/{scope} under {base}" + (f" (found: {', '.join(mine)})" if mine else ""))
-    path = mine[0]
+    # only <scope root>/.ai-personal-install.json, and only if it really sits inside the project root or $HOME
+    path = entry(os.path.join(home, spec[2:]) if user else os.path.join(cwd, spec))
+    if not path.startswith(bb + os.sep):
+        sys.exit(f"install record {path} is outside {bb}; nothing was deleted")
+    if not os.path.lexists(path):
+        print(f"  note  no install record at {path}; nothing to uninstall")
+        sys.exit(0)
     rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
-    root, bb = os.path.dirname(path), real(base)
+    root = os.path.dirname(path)
     # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
     paths = {}
     for a, e in rec["assets"].items():
@@ -443,8 +436,8 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
-  if [[ $UNINSTALL -eq 1 && ( $REF_SET -eq 1 || -n "$LOCAL_PATH" || $YES_DEPS -eq 1 || $NO_DEPS -eq 1 ) ]]; then
-    _fail "--ref, --local, --yes-deps and --no-deps cannot be combined with --uninstall"; usage; exit 1
+  if [[ $UNINSTALL -eq 1 && ( $YES_DEPS -eq 1 || $NO_DEPS -eq 1 ) ]]; then
+    _fail "--yes-deps and --no-deps cannot be combined with --uninstall"; usage; exit 1
   fi
   if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
   if [[ $REF_SET -eq 1 ]]; then
@@ -923,18 +916,18 @@ apply_selection() {
 }
 
 # ── Uninstall (ADR-0012 "Consumers MUST") ───────────────────────────────────
-# Removes what the install record says this tool placed, after the record and
-# every path in it pass the checks in `_json uninstall`. Nothing is fetched.
+# Removes what <scope root>/.ai-personal-install.json says this tool placed, after
+# the record and every path in it pass the checks in `_json uninstall`.
 uninstall() {
   local cats=""
   if [[ -n "$ASSETS_RAW" ]]; then resolve_categories; cats="${CATEGORIES[*]}"; fi
   _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run (uninstall)" || echo "uninstalling")"
-  _json uninstall "$HARNESS" "$SCOPE" "$PWD" "$HOME" "$DRY_RUN" "$FORCE" "$cats"
+  _json uninstall "${SCOPE_ROOT:+$SCOPE_ROOT/}.ai-personal-install.json" "$HARNESS" "$SCOPE" \
+    "$PWD" "$HOME" "$DRY_RUN" "$FORCE" "$cats"
 }
 
 main() {
   parse_args "$@"
-  if [[ $UNINSTALL -eq 1 ]]; then uninstall; return; fi
   fetch_source
   build_catalog
   if [[ ! -f "$SRC/scripts/harnesses.json" ]]; then
@@ -942,6 +935,7 @@ main() {
     exit 1
   fi
   validate_harness_and_scope
+  if [[ $UNINSTALL -eq 1 ]]; then uninstall; return; fi
   resolve_categories
   select_assets
   resolve_dependencies
