@@ -17,14 +17,15 @@ decides when the Copilot translation runs) and reconciles
 
 ADR-0007 made `install.sh` translate plugin-shaped suites for Copilot after copying them. The
 decision to run that translation was a hardcoded helper, `is_copilot_suite_category()`
-(`[[ "$HARNESS" == "copilot" && "$category" == "suites" ]]`), called from three places. That put a
+(`[[ "$HARNESS" == "copilot" && "$category" == "suites" ]]`), originally called from three places
+(one, `plan_item()`, by the time of this change). That put a
 harness name back into `install.sh`'s control flow, which ADR-0003 was written to prevent
 (deferred item #9).
 
 Separately, `resolve_dependencies()` once checked only `mapping` for a dependency and skipped the
-plugin-shaped filter that requested items got. That was fixed before this change by routing both
-paths through `plan_item()`, so a dependency on a non-plugin-shaped suite is already warned and
-skipped for `--harness copilot`.
+plugin-shaped filter that requested items got. That was fixed before this change (#15), and both
+paths now go through `plan_item()` (#21), so a dependency on a non-plugin-shaped suite is already
+warned and skipped for `--harness copilot`.
 
 ## Decision
 
@@ -72,8 +73,10 @@ already gives a dependency in an unmapped category.
 
 ### Neutral
 
-- Behaviour is unchanged for every existing run; only the dry-run annotation text changed, from
-  `(copilot-translated)` to `(translated: <transform>)`.
+- Installed files are byte-identical for every existing run. Two notes changed text: the dry-run
+  annotation, from `(copilot-translated)` to `(translated: <transform>)`, and the
+  not-plugin-shaped skip note, from `no Copilot translation available` to
+  `no '<transform>' translation available`.
 - The rest of ADR-0007 (plugin-shaped suites, the Copilot translation itself, `pluginShaped` in the
   catalog) is unaffected. Its dependency half stays superseded by ADR-0009; ADR-0009 is not
   superseded by this one.

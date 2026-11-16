@@ -1,5 +1,5 @@
 ---
-date: 2026-11-15
+date: 2026-11-13
 description: Known deferred items, open decisions, and future work to revisit in later sessions
 status: active
 tags: [backlog, deferred]

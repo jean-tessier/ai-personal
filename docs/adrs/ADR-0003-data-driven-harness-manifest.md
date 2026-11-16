@@ -12,7 +12,7 @@ status: accepted
 Accepted
 
 [ADR-0011](ADR-0011-translate-transforms-as-harness-data.md) restores "never branches on a harness
-name" after ADR-0007's Copilot gate briefly broke it, by moving that gate into `harnesses.json` as
+name" after ADR-0007's Copilot gate broke it, by moving that gate into `harnesses.json` as
 `translate`. It narrows "adding a harness is a JSON edit": that holds for harnesses reusing an
 existing transform; a new kind of transform still needs `install.sh` code.
 
