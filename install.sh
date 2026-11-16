@@ -337,11 +337,16 @@ elif mode == "uninstall":
     # whole record. A .git segment is refused too: uninstall otherwise trusts the record you hold
     # (run --dry-run first).
     ctrl = lambda s: not s.isprintable()
-    # A record read from $HOME (user scope, or project scope run from $HOME) is confined to its
-    # scope root, where every such placement sits, so it can't name ~/.zshrc; any other project
-    # scope may place at the project root (guard 3).
+    # A record whose base is $HOME or contains it (user scope, or project scope run from $HOME or an
+    # ancestor of it) is confined to its scope root, where every such placement sits, so it can't
+    # name ~/.zshrc; any other project scope may place at the project root (guard 3). Compared by
+    # identity, not spelling (letter case, firmlinks); an empty HOME fails closed.
     sr = spec[:-len(".ai-personal-install.json")]  # the scope root as keys spell it: "~/.claude/" or ".claude/"
-    confine = user or bb == real(home)
+    h, under = (real(home), False) if home else ("", True)
+    while h and not under:
+        under = os.path.isdir(h) and os.path.samefile(h, base)
+        h = "" if os.path.dirname(h) == h else os.path.dirname(h)
+    confine = user or under
     if confine and root == bb:
         sys.exit(f"install record {path}: the scope root is {bb} itself; nothing was deleted")
     paths = {}
@@ -350,7 +355,8 @@ elif mode == "uninstall":
             sys.exit(f"install record {path}: unsafe asset name {a!r}; nothing was deleted")
         for k in e["files"]:
             if confine and not k.startswith(sr):
-                sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr}; nothing was deleted")
+                sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr} (a record whose base "
+                         f"is your home directory, or contains it, is confined to its scope root); nothing was deleted")
             t = k[2:] if user else k
             if (not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
                     or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))):

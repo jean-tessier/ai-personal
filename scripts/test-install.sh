@@ -1641,8 +1641,62 @@ test_uninstall_confined_when_the_record_is_in_home() {
     assert_exit "~/.claude/$f via a symlinked dir: exits 1" 1 "$code"
     assert_contains "~/.claude/$f via a symlinked dir: says why" "$out" "resolves outside the scope root"
   done
+  # the same through a project-scope record read from $HOME
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home/.claude" ".claude/" up/.zshrc
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit ".claude/up/.zshrc from \$HOME: exits 1" 1 "$code"
+  assert_contains ".claude/up/.zshrc from \$HOME: says why" "$out" "resolves outside the scope root"
   assert_exists "~/.zshrc untouched" "$sb/home/.zshrc"
   assert_exists "~/Projects/foo/README.md untouched" "$sb/home/Projects/foo/README.md"
+}
+
+# Confinement compares directories by identity, so another spelling of $HOME (letter case,
+# a firmlink) or a $HOME inside the project directory can't switch it off.
+test_uninstall_confinement_by_identity() {
+  _head "--uninstall confines a record whose base is \$HOME, however it is spelled, or contains it"
+  local sb out code n v
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude" "$sb/home/.ssh"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home" "" .zshrc .ssh/id_ed25519
+  n="$(count_files "$sb/home")"
+  for v in "$sb/HOME" "/System/Volumes/Data$(cd "$sb/home" && pwd -P)"; do
+    if [[ ! -d "$v" || ! "$v" -ef "$sb/home" ]]; then _skip "no other spelling of \$HOME here: $v"; continue; fi
+    out="$( cd "$v" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+    assert_exit "from $v: exits 1" 1 "$code"
+    assert_contains "from $v: says why" "$out" "outside the scope root"
+    assert_exit "from $v: nothing deleted" "$n" "$(count_files "$sb/home")"
+  done
+  # $HOME inside the project directory
+  sb="$(new_sandbox)"; mkdir -p "$sb/cwd/.claude" "$sb/cwd/.home/.ssh"
+  printf 'alias x=y\n' > "$sb/cwd/.home/.zshrc"; printf 'KEY\n' > "$sb/cwd/.home/.ssh/id_ed25519"
+  write_rec "$sb/cwd/.claude/.ai-personal-install.json" claude-code project "$sb/cwd" "" .home/.zshrc .home/.ssh/id_ed25519
+  n="$(count_files "$sb/cwd")"
+  out="$( cd "$sb/cwd" && HOME="$sb/cwd/.home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "\$HOME under the project: exits 1" 1 "$code"
+  assert_contains "\$HOME under the project: says why" "$out" "outside the scope root"
+  assert_exit "\$HOME under the project: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+}
+
+# Legit round trips the confinement must not break.
+test_uninstall_round_trips_around_home() {
+  _head "--uninstall round trips: copilot in a project under \$HOME, ~/.claude symlinked to dotfiles"
+  local sb out code
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/P"
+  ( cd "$sb/home/P" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness copilot --scope project --yes-deps </dev/null >/dev/null 2>&1 )
+  assert_exists "copilot in ~/P: a project-root file was placed" "$sb/home/P/Makefile"
+  out="$( cd "$sb/home/P" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness copilot --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "copilot in ~/P: exits 0" 0 "$code"
+  assert_exit "copilot in ~/P: no file left" 0 "$(count_files "$sb/home/P")"
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/dotfiles/claude"; ln -s dotfiles/claude "$sb/home/.claude"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "~/.claude symlinked to dotfiles: exits 0" 0 "$code"
+  assert_exit "~/.claude symlinked to dotfiles: no file left" 0 "$(count_files "$sb/home/dotfiles")"
 }
 
 # The project root is never pruned, even when it sits inside the scope root.
@@ -1854,6 +1908,8 @@ test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
 test_uninstall_prune_stops_at_cwd
 test_uninstall_confined_when_the_record_is_in_home
+test_uninstall_confinement_by_identity
+test_uninstall_round_trips_around_home
 test_uninstall_refuses_bad_or_missing_record
 test_uninstall_unreadable_asset_dir_aborts
 test_uninstall_keeps_shared_record_and_scope_root
