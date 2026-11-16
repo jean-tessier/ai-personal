@@ -1,5 +1,5 @@
 ---
-date: 2026-11-13
+date: 2026-11-16
 description: Known deferred items, open decisions, and future work to revisit in later sessions
 status: active
 tags: [backlog, deferred]
@@ -35,6 +35,12 @@ Items explicitly set aside during prior sessions. Resolved items are struck thro
 | 21 | plan-dag references `review-loop`, `board-refresh` and `session-retro` skills and `.claude/agents/builder.md`, none of which ship in this repo: add them or drop the steps | open-decision | normal | PR #11 (plan-dag evals) and its independent review | 2026-11-13 | partly resolved 2026-11-13: `skills/review-loop` added; `board-refresh`, `session-retro` and `builder.md` still missing |
 | 22 | ~~Implement ADR-0008 suite manifest: resourceKinds in harnesses.json, manifest.json read/validate in catalog.sh/validate.sh/install.sh, migrate tier-layered-teams, decide merge-mode semantics~~ | future-work | normal | ADR-0008 (PR #10) | 2026-11-13 | partly done 2026-11-15: lint, catalog `manifest` field, `resourceKinds` and the `copy` placement engine are in (inert); 2026-11-16: `merge` mode done (ADR-0013), so the placement engine is complete; done 2026-11-16: `tier-layered-teams` migrated (`suites/tier-layered-teams/manifest.json`), the placement engine is switched on |
 | 23 | MIG: pre-migration claude-code installs have `.claude/suites/tier-layered-teams/claude-code/{agents,.claude-plugin}`; the manifest places to `…/tier-layered-teams/{agents,.claude-plugin}` and per-file copy never removes the old tree, so an upgrade leaves two plugin roots: document or handle in the migration slice | future-work | normal | P2 review (placement engine) | 2026-11-16 | documented 2026-11-16: upgrade note with the exact old path to delete by hand in `suites/tier-layered-teams/USAGE.md` (install.sh never removes files it no longer places; installs since ADR-0012 do list the old files in their record; no cleanup code); revisit only if `--uninstall` should learn pre-record layouts |
+| 24 | Share one control-character helper: P2's placements `ctl()` (code < 32 and 127) and uninstall's `ctrl` (`not isprintable()`) are separate copies of the same idea | tech-debt | low | IM2 build report | 2026-11-16 | |
+| 25 | `record_write` spawns one `python3` per placed file and rewrites the whole record each time (fine at ~30 files, slow for a suite with hundreds): batch the flush per asset | tech-debt | low | P2 and IM1 reviews | 2026-11-16 | |
+| 26 | `--uninstall` runs the fetched tree's `catalog.sh` (via `build_catalog`) though it only needs `harnesses.json`: set `HARNESSES_JSON` directly to shrink the surface and stop a broken catalog from blocking an uninstall | tech-debt | low | IM2 adversarial review | 2026-11-16 | |
+| 27 | Installer tests were run locally on macOS only (CI covers Ubuntu); `scripts/test-install-docker.sh` (root, case-sensitive file system) was never run for the record, uninstall and placement tests (chmod tests skip as root; the `$HOME`-spelling tests skip off APFS); native Windows/Git Bash is untested for the record paths and uninstall | future-work | normal | IM1, IM2 and MIG reviews | 2026-11-16 | |
+| 28 | `--uninstall` does not protect a git directory not named `.git` (`--separate-git-dir`, a bare `foo.git/`), and refuses the whole uninstall when a subdirectory of `~/.claude` is itself symlinked into a dotfiles repo (accepted and documented in ADR-0012 and the installer memory doc): revisit if users hit either | open-decision | low | IM2 delta reviews | 2026-11-16 | |
+| 29 | `test_manifest_lint_rejects_bad_manifest` failed once on its "flags the typo'd category" assertion under very heavy machine load (load average ~33-55) and passed on every rerun: watch for recurrence | tech-debt | low | IM2 build report | 2026-11-16 | |
 
 > Item 1: two corroborating VS Code-specific sources (product docs + the
 > `microsoft/vscode-copilot-chat` extension repo) show `hookSpecificOutput.permissionDecision`
