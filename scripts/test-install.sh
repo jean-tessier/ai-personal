@@ -566,6 +566,53 @@ test_ref_pins_fetched_tree
 test_ref_rejects_bad_values
 test_ref_with_local_fails
 
+# A dependency that can't be placed is noted once, even though a later
+# resolve_dependencies() round still sees it declared by an already-selected suite.
+test_dep_skip_note_printed_once() {
+  _head "a skipped dependency's note is printed once across rounds"
+  local sb src out code note="dependency 'prompts/y' has an unrecognized category"
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/s1" "$src/suites/fixture-suite"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  printf '{"h":{"label":"H","scopes":{"project":".x"},"mapping":{"skills":"skills/{name}","suites":"suites/{name}"}}}' \
+    > "$src/scripts/harnesses.json"
+  printf -- '---\nname: s1\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+  printf '# fixture\n' > "$src/suites/fixture-suite/README.md"
+  # prompts/y is skipped in round 1; skills/s1 is added, forcing a round 2 that
+  # still sees prompts/y declared by the already-selected suite.
+  printf '["prompts/y","skills/s1"]' > "$src/suites/fixture-suite/dependencies.json"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness h --scope project --assets suites --yes-deps ) 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "dependency skill installed (so a second round ran)" "$sb/cwd/.x/skills/s1/SKILL.md"
+  [[ "$(grep -c "$note" <<< "$out")" -eq 1 ]] \
+    && _ok "prompts/y's skip note appears exactly once" \
+    || _fail "prompts/y's skip note appears exactly once (got $(grep -c "$note" <<< "$out"))"
+}
+test_dep_skip_note_printed_once
+
+# A scope root of "" must anchor at $PWD like any other relative root, never at "/".
+test_empty_scope_root_anchors_at_pwd() {
+  _head "an empty scope root anchors at the project root, not /"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/s1"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  printf '{"h":{"label":"H","scopes":{"project":""},"mapping":{"skills":"skills/{name}"}}}' \
+    > "$src/scripts/harnesses.json"
+  printf -- '---\nname: s1\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness h --scope project --assets skills --dry-run ) 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "destination is under the project root" "$out" "$sb/cwd/skills/s1"
+  assert_not_contains "destination is not rooted at /" "$out" " -> /skills/"
+}
+test_empty_scope_root_anchors_at_pwd
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"
