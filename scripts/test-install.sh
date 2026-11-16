@@ -301,6 +301,28 @@ test_deps_already_selected_no_duplicate() {
     || _fail "skills/create-adr appears exactly once (got $(grep -c "skills/create-adr" <<< "$out"))"
 }
 
+test_deps_unsupported_category_warns() {
+  _head "deps in a category the harness has no mapping for warn and are skipped"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills" "$src/suites/fixture-suite"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  # Synthetic harness maps only suites, so a skills/ dep has no mapping.
+  printf '{"only-suites":{"label":"Only suites","scopes":{"project":".x"},"mapping":{"suites":"suites/{name}"}}}' \
+    > "$src/scripts/harnesses.json"
+  printf '# fixture\n' > "$src/suites/fixture-suite/README.md"
+  printf '["skills/x","prompts/y"]' > "$src/suites/fixture-suite/dependencies.json"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness only-suites --scope project --assets suites --yes-deps ) 2>&1 )"; code=$?
+  assert_exit "exits 0 — unsupported deps are not fatal" 0 "$code"
+  assert_contains "warns skills/x has no mapping" "$out" "dependency 'skills/x' has no mapping for harness 'only-suites'"
+  assert_contains "warns prompts/y has an unrecognized category" "$out" "dependency 'prompts/y' has an unrecognized category"
+  assert_exists "suite itself still installed" "$sb/cwd/.x/suites/fixture-suite/README.md"
+  assert_missing "no skills/ dir created" "$sb/cwd/.x/skills"
+}
+
 test_interactive_picker_fallback() {
   _head "interactive numbered picker (no fzf/gum on PATH)"
   if command -v fzf &>/dev/null || command -v gum &>/dev/null; then
@@ -432,6 +454,7 @@ test_deps_auto_added_with_yes_deps
 test_deps_missing_noninteractive_fails
 test_deps_no_deps_flag_skips
 test_deps_already_selected_no_duplicate
+test_deps_unsupported_category_warns
 test_interactive_picker_fallback
 test_no_deps_flag_skips_dependencies
 test_copilot_suite_translation
