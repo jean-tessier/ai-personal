@@ -53,7 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
 | `--dry-run` | print planned copy operations; write nothing |
 | `--force` | overwrite existing destination files/dirs (default: skip existing) |
-| `--no-deps` | don't auto-include a selected suite's declared skill dependencies (see below) |
+| `--yes-deps` | add declared dependencies without prompting (see below) |
+| `--no-deps` | skip declared dependencies instead of adding or prompting; can't be combined with `--yes-deps` |
 | `-h`, `--help` | show usage |
 
 Harness/scope keys come from `scripts/harnesses.json`:
@@ -65,14 +66,22 @@ Harness/scope keys come from `scripts/harnesses.json`:
 
 `copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`.
 
+Any asset can declare dependencies on other assets in a colocated `dependencies.json` (a flat
+array of repo-relative paths, e.g. `["skills/create-adr", "skills/yaml-frontmatter"]` for
+`handoff-workflow`) — see
+[ADR-0009](docs/adrs/ADR-0009-colocated-dependency-manifest.md). `install.sh` adds any that
+aren't already selected, transitively, deciding once per batch:
+
+- `--yes-deps` adds them; `--no-deps` skips them with a warning.
+- With neither flag and a terminal attached, it asks `Add them? [Y/n]`.
+- With neither flag and **no terminal** (including `curl | bash`), it fails closed: it exits 1
+  and names the missing paths rather than leave a broken partial install. This also applies
+  under `--dry-run`. Scripted runs that install suites should pass `--yes-deps` or `--no-deps`.
+
 Some suites (and every skill) carry a `.claude-plugin/plugin.json`, making them real
 Claude Code/Copilot plugins — see
 [ADR-0007](docs/adrs/ADR-0007-suites-as-native-plugins.md). For those, `install.sh`:
 
-- **Auto-includes declared dependencies.** A suite that names shared skills in its
-  `plugin.json`'s `dependencies` (e.g. `handoff-workflow` needs `create-adr` and
-  `yaml-frontmatter`) gets those skills installed alongside it, deduped against
-  anything already selected. Pass `--no-deps` to skip this.
 - **Translates plugin-shaped suites for `--harness copilot`**: `agents/*.md` →
   `agents/*.agent.md`, and `.claude-plugin/plugin.json` moves to a root `plugin.json` —
   Copilot's own manifest location, per GitHub's docs. A suite without a

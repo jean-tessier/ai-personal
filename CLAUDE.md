@@ -71,8 +71,9 @@ and `scripts/harnesses.json`. This is the one exception to the "eval cases" note
 **A suite may additionally carry a root `.claude-plugin/plugin.json`**, making it a real
 Claude Code/Copilot plugin — `scripts/catalog.sh` surfaces this per suite as `pluginShaped`
 and `dependencies`. This is optional, not a third kind of asset: a suite without one is
-still a normal suite, just not eligible for `install.sh`'s dependency auto-include or its
-Copilot translation. See `docs/adrs/ADR-0007-suites-as-native-plugins.md` for which suites
+still a normal suite, just not eligible for `install.sh`'s Copilot translation (dependency
+auto-include applies to any asset with a `dependencies.json`, per
+`docs/adrs/ADR-0009-colocated-dependency-manifest.md`). See `docs/adrs/ADR-0007-suites-as-native-plugins.md` for which suites
 have one and why (it's only added where the suite's shape already fits — never force-fit).
 
 **Naming rule that matters across the whole repo**: a directory's kebab-case name is its canonical
