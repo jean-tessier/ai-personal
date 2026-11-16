@@ -22,7 +22,7 @@ read_dependencies_json() {
   local dir="$1" file="$dir/dependencies.json"
   [[ -s "$file" ]] || { printf '[]'; return; }
   if command -v python3 &>/dev/null; then
-    python3 -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+    python3 -I -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
   elif command -v jq &>/dev/null; then
     jq . "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
   fi
@@ -35,7 +35,7 @@ read_manifest_json() {
   local file="$1/manifest.json"
   [[ -s "$file" ]] || { printf 'null'; return; }
   if command -v python3 &>/dev/null; then
-    python3 -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+    python3 -I -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
   elif command -v jq &>/dev/null; then
     jq . "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
   fi

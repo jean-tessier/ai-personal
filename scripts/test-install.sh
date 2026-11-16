@@ -679,7 +679,7 @@ record_json() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); pri
 # record_mode <args...>: runs install.sh's own python `record` mode directly.
 record_mode() {
   local py
-  py="$(awk '/python3 - "\$@" <<.PY.$/{f=1;next} /^PY$/{f=0} f' "$INSTALL")"
+  py="$(awk '/python3 -I - "\$@" <<.PY.$/{f=1;next} /^PY$/{f=0} f' "$INSTALL")"
   python3 -c "$py" record "$@"
 }
 
@@ -868,6 +868,24 @@ test_validate_rejects_symlinks_in_assets() {
   assert_contains "names the symlink" "$out" "symlink"
 }
 
+test_python_ignores_cwd_modules() {
+  _head "python runs isolated: a json.py in the cwd is never imported (SEC1)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  printf 'open("%s", "w").close()\n' "$sb/pwned" > "$sb/cwd/json.py"
+  run_install "$sb" --harness claude-code --scope project --assets skills --dry-run </dev/null >/dev/null 2>&1
+  assert_missing "install.sh did not import cwd json.py" "$sb/pwned"; rm -f "$sb/pwned"
+  rm -f "$sb/pwned"
+  ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$REPO/scripts/catalog.sh" </dev/null >/dev/null 2>&1 )
+  assert_missing "catalog.sh did not import cwd json.py" "$sb/pwned"
+  src="$sb/fake_src"; mkdir -p "$src"
+  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$REPO/install.sh" "$src/"
+  printf '%s\n' 'python3 - <<X' 'X' >> "$src/scripts/catalog.sh"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "validate.sh exits 1 on a non-isolated python3" 1 "$code"
+  assert_contains "names the rule" "$out" "python3 without -I"
+}
+
 test_record_lists_every_copied_file
 test_record_covers_copilot_translation_and_dependencies
 test_record_merges_on_reinstall
@@ -881,6 +899,7 @@ test_record_other_harness_or_scope_refused
 test_record_survives_midway_failure
 test_record_mode_rejects_missing_placed_path
 test_validate_rejects_symlinks_in_assets
+test_python_ignores_cwd_modules
 
 # Suite manifest placements (ADR-0008, copy mode): a fixture suite "fx" with a manifest.json.
 # manifest_fixture <sandbox> <manifest json>: builds <sandbox>/fake_src (real harnesses.json) and prints its path.

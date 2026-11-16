@@ -80,7 +80,7 @@ CATEGORIES=()
 # top-level set -euo pipefail) keeps python's own exit code flowing through the
 # pipe, since tr always exits 0.
 _json() {
-  { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 - "$@" <<'PY'
+  { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 -I - "$@" <<'PY'
 import json, os, sys
 
 def load(path):
