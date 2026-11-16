@@ -11,6 +11,8 @@ status: accepted
 
 Accepted
 
+Dependency half superseded by ADR-0009.
+
 ## Context
 
 Two gaps existed in this repo's asset model:
