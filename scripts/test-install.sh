@@ -1582,6 +1582,13 @@ test_uninstall_path_guards_abort_before_deleting() {
   assert_exit "user scope, path outside the scope root: exits 1" 1 "$code"
   assert_contains "user scope, path outside the scope root: says why" "$out" "outside the scope root"
   assert_exit "user scope, path outside the scope root: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # .GIT through a symlinked .git resolves elsewhere: only the case-insensitive text rule sees it
+  sb="$(new_sandbox)"; mkdir -p "$sb/cwd/.claude" "$sb/cwd/gitdir"; printf 'ref\n' > "$sb/cwd/gitdir/HEAD"; ln -s gitdir "$sb/cwd/.git"
+  printf '{"version":1,"harness":"claude-code","scope":"project","assets":{"skills/zz":{"files":{".GIT/HEAD":"sha256:0"}}}}' \
+    > "$sb/cwd/.claude/.ai-personal-install.json"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "'.GIT/HEAD' via a symlinked .git: exits 1" 1 "$code"
+  assert_exists "'.GIT/HEAD' via a symlinked .git: nothing deleted" "$sb/cwd/gitdir/HEAD"
 }
 
 # The project root is never pruned, even when it sits inside the scope root.
