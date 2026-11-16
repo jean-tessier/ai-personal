@@ -17,6 +17,7 @@
 #   --force             overwrite existing destination files/dirs (default: skip)
 #   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
 #   --no-deps           skip dependencies instead of adding/prompting
+#   --uninstall         remove what the scope root's install record lists (--dry-run first)
 #   -h, --help          show usage
 #
 # Exit:   0 success · 1 bad input or fetch/copy failure
@@ -40,6 +41,7 @@ command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/
 usage() {
   cat <<'USAGE'
 Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--ref <ref>] [--dry-run] [--force] [--yes-deps|--no-deps]
+       install.sh --uninstall --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--ref <ref>] [--dry-run] [--force]
 
   --harness   harness key from scripts/harnesses.json (e.g. claude-code, copilot)
   --scope     scope key declared for that harness (e.g. project, user)
@@ -50,6 +52,9 @@ Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [-
   --force     overwrite existing destination files/dirs (default: skip existing)
   --yes-deps  auto-add dependencies (from dependencies.json) with no prompt
   --no-deps   skip dependencies instead of adding/prompting
+  --uninstall remove the files the install record lists, in the given categories (default: all);
+              a modified asset is kept whole unless --force; --dry-run lists, deletes nothing.
+              It trusts the record you hold: run it with --dry-run first
   -h, --help  show this help
 USAGE
 }
@@ -62,6 +67,7 @@ FORCE=0
 YES_DEPS=0
 NO_DEPS=0
 REF_SET=0
+UNINSTALL=0
 LOCAL_PATH=""   # test seam: skip network fetch, use a local checkout instead
 
 WORK="$(mktemp -d)"
@@ -81,11 +87,43 @@ CATEGORIES=()
 # pipe, since tr always exits 0.
 _json() {
   { CATALOG_JSON="$CATALOG_JSON" HARNESSES_JSON="$HARNESSES_JSON" python3 -I - "$@" <<'PY'
-import json, os, sys
+import json, os, stat, sys
 
 def load(path):
     with open(path) as f:
         return json.load(f)
+
+# The one install-record validator (ADR-0012), shared by install and uninstall.
+def load_record(path, harness, scope):
+    def bad(why):
+        sys.exit(f"install record {path}: {why}")
+    try:
+        if not stat.S_ISREG(os.stat(path).st_mode):
+            bad("not a regular file")  # a FIFO would block the read forever
+        rec = load(path)
+    except (ValueError, OSError) as e:
+        bad(f"not valid JSON ({e})")
+    if not isinstance(rec, dict) or rec.get("version") != 1:
+        bad("not a version-1 install record")
+    if not isinstance(rec.get("assets"), dict) or not all(
+            isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
+        bad("malformed assets")
+    if (rec.get("harness"), rec.get("scope")) != (harness, scope):
+        show = lambda v: v if isinstance(v, str) and v.isprintable() else repr(v)  # no raw escapes on the terminal
+        sys.exit(f"install record {path} belongs to {show(rec.get('harness'))}/{show(rec.get('scope'))}, not {harness}/{scope}")
+    return rec
+
+# Safe record write: fresh temp file (a planted symlink is unlinked, never followed), then rename.
+def save_record(path, rec):
+    tmp = path + ".tmp"
+    try:
+        os.unlink(tmp)
+    except FileNotFoundError:
+        pass
+    with open(tmp, "x") as f:
+        json.dump(rec, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
 
 def find_item(catalog, category, name):
     for it in catalog.get("assets", {}).get(category, []):
@@ -246,21 +284,9 @@ elif mode == "placements":
 elif mode == "record":
     import datetime, hashlib
     path, harness, scope, repo, ref, tsv, cwd, home = args
-    def bad(why):
-        sys.exit(f"install record {path}: {why}")
     rec = {"version": 1, "harness": harness, "scope": scope, "assets": {}}
     if os.path.exists(path):
-        try:
-            rec = load(path)
-        except (ValueError, OSError) as e:
-            bad(f"not valid JSON ({e})")
-        if not isinstance(rec, dict) or rec.get("version") != 1:
-            bad("not a version-1 install record")
-        if not isinstance(rec.get("assets"), dict) or not all(
-                isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
-            bad("malformed assets")
-        if (rec.get("harness"), rec.get("scope")) != (harness, scope):
-            sys.exit(f"install record {path} belongs to {rec.get('harness')}/{rec.get('scope')}, not {harness}/{scope}")
+        rec = load_record(path, harness, scope)
     with open(tsv) as f:
         rows = [line.rstrip("\n").split("\t") for line in f]
     if rows:
@@ -281,15 +307,148 @@ elif mode == "record":
                 with open(file, "rb") as fh:
                     entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        tmp = path + ".tmp"
+        save_record(path, rec)
+
+elif mode == "uninstall":
+    # The record is user-editable, so it is untrusted: every check runs before any delete.
+    import hashlib, stat
+    spec, harness, scope, cwd, home, dry, force, cats = args
+    dry, force, cats, user = dry == "1", force == "1", cats.split(), spec.startswith("~/")
+    base = home if user else cwd
+    real = os.path.realpath
+    bb = real(base)
+    def entry(q):  # q's directory entry: real parent + own name (a final symlink is not followed)
+        return os.path.join(real(os.path.dirname(q)), os.path.basename(q))
+    # only <scope root>/.ai-personal-install.json, and only if it really sits inside the project root or $HOME
+    path = entry(os.path.join(home, spec[2:]) if user else os.path.join(cwd, spec))
+    if not path.startswith(bb + os.sep):
+        sys.exit(f"install record {path} is outside {bb}; nothing was deleted")
+    try:
+        os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        print(f"  note  no install record at {path}; nothing to uninstall")
+        sys.exit(0)
+    except OSError as e:
+        sys.exit(f"install record {path}: {e.strerror}; nothing was deleted")
+    rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
+    root = os.path.dirname(path)
+    # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
+    # Names are printed, so anything unprintable (terminal escapes, NUL, bidi overrides) refuses the
+    # whole record. A .git segment is refused too: uninstall otherwise trusts the record you hold
+    # (run --dry-run first).
+    ctrl = lambda s: not s.isprintable()
+    # A record whose base is $HOME or contains it (user scope, or project scope run from $HOME or an
+    # ancestor of it) is confined to its scope root, where every such placement sits, so it can't
+    # name ~/.zshrc; any other project scope may place at the project root (guard 3). Compared by
+    # identity, not spelling (letter case, firmlinks); an empty HOME fails closed.
+    sr = spec[:-len(".ai-personal-install.json")]  # the scope root as keys spell it: "~/.claude/" or ".claude/"
+    h, under = (real(home), False) if home else ("", True)
+    while h and not under:
+        under = os.path.isdir(h) and os.path.samefile(h, base)
+        h = "" if os.path.dirname(h) == h else os.path.dirname(h)
+    confine = user or under
+    if confine and root == bb:
+        sys.exit(f"install record {path}: the scope root is {bb} itself; nothing was deleted")
+    paths = {}
+    for a, e in rec["assets"].items():
+        if ctrl(a):
+            sys.exit(f"install record {path}: unsafe asset name {a!r}; nothing was deleted")
+        for k in e["files"]:
+            if confine and not k.startswith(sr):
+                sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr} (a record whose base "
+                         f"is your home directory, or contains it, is confined to its scope root); nothing was deleted")
+            t = k[2:] if user else k
+            if (not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
+                    or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))):
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
+            r = entry(os.path.join(base, t))  # resolved only after the text checks pass
+            inside = root if confine else bb
+            if not r.startswith(inside + os.sep):
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a} resolves outside "
+                         f"{'the scope root ' if confine else ''}{inside} (a symlinked directory?); nothing was deleted")
+            if ".git" in r[len(bb) + 1:].lower().split(os.sep):  # a symlink into .git, too
+                sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
+            paths[k] = os.path.join(base, t)
+    sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]
+    def ident(q):  # compare files, not spellings (case-insensitive file systems, links)
         try:
-            os.unlink(tmp)  # a planted symlink here must not be followed
-        except FileNotFoundError:
-            pass
-        with open(tmp, "x") as f:
-            json.dump(rec, f, indent=2, sort_keys=True)
-            f.write("\n")
-        os.replace(tmp, path)
+            st = os.stat(q)
+            return (st.st_dev, st.st_ino)
+        except OSError:
+            return None
+    own, stops = {ident(path), ident(root)}, {ident(root), ident(base), ident(cwd), ident(home)} - {None}
+    def sha(p):  # never blocks on a FIFO, never follows a link, hashes only a regular file
+        try:
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
+            with os.fdopen(fd, "rb") as fh:
+                if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    return None
+                return "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+        except OSError:
+            return None
+    plan = {}
+    for a in sel:
+        dele, mod = [], []
+        for k, h in rec["assets"][a]["files"].items():
+            p = paths[k]
+            try:
+                st = os.lstat(p)  # guard 4: look before touching
+            except (FileNotFoundError, NotADirectoryError):
+                continue  # already gone: forgotten
+            except OSError as e:
+                sys.exit(f"install record {path}: cannot check {k!r}: {e.strerror}; nothing was deleted")
+            if ident(p) in own:
+                print(f"  skip    {k} (the install record or the scope root)")
+            elif not (stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode)):
+                print(f"  skip    {k} (not a file)")
+            else:
+                if stat.S_ISLNK(st.st_mode) or sha(p) != h:  # guard 6; a link is never ours, never read
+                    mod.append(k)
+                dele.append((k, p))
+        for k in mod:
+            print(f"  {'force' if force else 'keep'}    {a}, modified: {k}" + ("" if force else " (use --force to delete it)"))
+        if not mod or force:
+            plan[a] = dele
+    # guard 5: a path of any asset that stays (not selected, or kept as modified) is never deleted
+    claimed = {ident(paths[k]) for a, e in rec["assets"].items() if a not in plan for k in e["files"]} - {None}
+    failed = False
+    for a, dele in plan.items():
+        left = {}
+        for k, p in dele:
+            if ident(p) in claimed:
+                print(f"  skip    {k} (also claimed by an asset that stays)")
+                continue
+            if dry:
+                print(f"  [dry-run] would remove {k}")
+                continue
+            try:
+                os.unlink(p)  # never follows a symlink
+                print(f"  removed {k}")
+            except FileNotFoundError:
+                pass  # shared with an asset removed just before: forgotten
+            except OSError as e:
+                print(f"  FAIL    could not remove {k}: {e.strerror}", file=sys.stderr)
+                left[k], failed = rec["assets"][a]["files"][k], True
+        if dry:
+            continue
+        if left:
+            rec["assets"][a]["files"] = left
+        else:
+            del rec["assets"][a]
+        # guard 8: prune empty dirs bottom-up along the recorded path, stopping at a symlinked
+        # dir, the scope root, the project root or $HOME
+        for k, p in dele:
+            d = os.path.dirname(p)
+            while d.startswith(base + os.sep) and not os.path.islink(d) and ident(d) not in stops:
+                try:
+                    os.rmdir(d)  # only ever removes an empty directory
+                except OSError:
+                    break
+                d = os.path.dirname(d)
+    if not dry:  # guard 7: same safe write as install; an empty record is deleted
+        save_record(path, rec) if rec["assets"] else os.unlink(path)
+    if failed:
+        sys.exit("uninstall: some files could not be removed; they stay in the install record")
 
 else:
     sys.exit(f"unknown mode: {mode}")
@@ -313,6 +472,7 @@ parse_args() {
       --force)   FORCE=1; shift ;;
       --yes-deps) YES_DEPS=1; shift ;;
       --no-deps)  NO_DEPS=1; shift ;;
+      --uninstall) UNINSTALL=1; shift ;;
       --local)   LOCAL_PATH="$2"; shift 2 ;;  # undocumented test seam
       -h|--help) usage; exit 0 ;;
       *) _fail "unknown flag: $1"; usage; exit 1 ;;
@@ -325,6 +485,9 @@ parse_args() {
   # (unguarded) caller even though nothing actually went wrong.
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
+  if [[ $UNINSTALL -eq 1 && ( $YES_DEPS -eq 1 || $NO_DEPS -eq 1 ) ]]; then
+    _fail "--yes-deps and --no-deps cannot be combined with --uninstall"; usage; exit 1
+  fi
   if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
   if [[ $REF_SET -eq 1 ]]; then
     if [[ -n "$LOCAL_PATH" ]]; then _fail "--ref cannot be combined with --local"; usage; exit 1; fi
@@ -801,6 +964,17 @@ apply_selection() {
   [[ -z "$MERGE_KEPT" ]] || _warn "merge: left existing file(s) untouched (use --force to overwrite):$MERGE_KEPT"
 }
 
+# ── Uninstall (ADR-0012 "Consumers MUST") ───────────────────────────────────
+# Removes what <scope root>/.ai-personal-install.json says this tool placed, after
+# the record and every path in it pass the checks in `_json uninstall`.
+uninstall() {
+  local cats=""
+  if [[ -n "$ASSETS_RAW" ]]; then resolve_categories; cats="${CATEGORIES[*]}"; fi
+  _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run (uninstall)" || echo "uninstalling")"
+  _json uninstall "${SCOPE_ROOT:+$SCOPE_ROOT/}.ai-personal-install.json" "$HARNESS" "$SCOPE" \
+    "$PWD" "$HOME" "$DRY_RUN" "$FORCE" "$cats"
+}
+
 main() {
   parse_args "$@"
   fetch_source
@@ -810,6 +984,7 @@ main() {
     exit 1
   fi
   validate_harness_and_scope
+  if [[ $UNINSTALL -eq 1 ]]; then uninstall; return; fi
   resolve_categories
   select_assets
   resolve_dependencies

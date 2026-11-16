@@ -56,6 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--force` | overwrite existing destination files/dirs (default: skip existing). With `--harness copilot` this includes project-root files placed by a manifest suite (`tier-layered-teams`: `Makefile`, `.gitignore`, `.vscode/*`, `scripts/*`, `copilot-instructions.md`); preview with `--dry-run --force`, or pass `--assets skills` to refresh skills only. |
 | `--yes-deps` | add declared dependencies without prompting (see below) |
 | `--no-deps` | skip declared dependencies instead of adding or prompting; can't be combined with `--yes-deps` |
+| `--uninstall` | remove what the install record lists (see below); takes `--assets`, `--dry-run`, `--force` |
 | `-h`, `--help` | show usage |
 
 `--ref` pins the fetched tree, but the piped one-liner still runs whichever `install.sh` you
@@ -75,6 +76,20 @@ Each real install also writes `.ai-personal-install.json` in the scope root (for
 `.claude/.ai-personal-install.json`), listing every file it placed with its sha256 and the `--ref`
 it came from. Re-installs merge into it; `--dry-run` doesn't write it. See
 [ADR-0012](docs/adrs/ADR-0012-install-record.md).
+
+`--uninstall --harness <key> --scope <key>` fetches the tree like an install does (so `--ref` pins
+it), reads only that scope root's `.ai-personal-install.json` and removes the files it lists. It
+then prunes the empty directories they leave (never the scope root, the project root or `$HOME`)
+and shrinks the record, deleting it once it is empty. With no record it says so and exits 0. An
+asset with any file you changed is kept whole and named; `--force` lists those files and then
+deletes them too. Files you added yourself are never touched. `--assets` limits it to some
+categories, and `--dry-run` only lists what it would do. A record with an unsafe path (absolute,
+`..`, a `.git` segment, an unprintable character, outside the project root, or, for user scope or
+a project-scope record whose project directory is `$HOME` or contains it, outside its scope root,
+also through a symlinked directory such as a `~/.claude/skills` linked to a dotfiles repo) stops it
+before anything is deleted. Beyond that, uninstall trusts the record you hold, so run `--dry-run`
+first.
+It can't be combined with `--yes-deps` or `--no-deps`.
 
 Any asset can declare dependencies on other assets in a colocated `dependencies.json` (a flat
 array of repo-relative paths, e.g. `["skills/create-adr", "skills/yaml-frontmatter"]` for

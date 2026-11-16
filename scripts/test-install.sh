@@ -1444,6 +1444,483 @@ test_tlt_force_restores_exec_bit() {
 }
 test_tlt_force_restores_exec_bit
 
+# ── --uninstall (ADR-0012 "Consumers MUST") ─────────────────────────────────────
+# run_uninstall <sandbox> <args...>: --uninstall against this checkout (--local, never the network).
+run_uninstall() {
+  local sandbox="$1"; shift
+  ( cd "$sandbox/cwd" && HOME="$sandbox/home" PATH="$sandbox/bin:$PATH" bash "$INSTALL" --local "$REPO" --uninstall "$@" )
+}
+# count_files <dir>: regular files and symlinks under <dir>.
+count_files() { find "$1" \( -type f -o -type l \) 2>/dev/null | wc -l | tr -d ' '; }
+# rec_edit <record> <python statement on d> [arg]: rewrites the record in place; the arg is sys.argv[3].
+rec_edit() { python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); exec(sys.argv[2]); json.dump(d,open(p,"w"))' "$@"; }
+
+test_uninstall_round_trip() {
+  _head "--uninstall after an install leaves no installed file and no record"
+  local sb out code hs h s base
+  for hs in "claude-code project cwd" "claude-code user home" "copilot project cwd"; do
+    read -r h s base <<< "$hs"
+    sb="$(new_sandbox)"
+    run_install "$sb" --harness "$h" --scope "$s" --yes-deps </dev/null >/dev/null 2>&1
+    rm "$(find "$sb/$base" -name USAGE.md | head -1)"   # already gone: forgotten, not an error
+    stub_curl "$sb"   # uninstall fetches harnesses.json like install, so --ref is allowed
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --uninstall --harness "$h" --scope "$s" --ref v1 </dev/null 2>&1 )"; code=$?
+    assert_exit "$h/$s: exits 0" 0 "$code"
+    assert_contains "$h/$s: lists what it removed" "$out" "removed"
+    assert_exit "$h/$s: no file left" 0 "$(count_files "$sb/$base")"
+    assert_exit "$h/$s: empty dirs pruned up to the scope root, which stays" 1 "$(find "$sb/$base" -mindepth 1 -type d | wc -l | tr -d ' ')"
+    assert_contains "$h/$s: fetched the pinned tree (stubbed curl)" "$(cat "$sb/curl.args" 2>&1)" "codeload.github.com/jean-tessier/ai-personal/tar.gz/v1"
+  done
+}
+
+test_uninstall_reads_only_the_scope_root_record() {
+  _head "--uninstall reads only <scope root>/.ai-personal-install.json"
+  local sb out code n rec
+  # a user-scope record one level below \$HOME is not the scope root's record
+  sb="$(new_sandbox)"; printf 'mine\n' > "$sb/home/victim"; mkdir "$sb/home/cloned"
+  python3 -c 'import hashlib,json,sys; h=hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest(); json.dump({"version":1,"harness":"claude-code","scope":"user","assets":{"skills/x":{"files":{"~/victim":"sha256:"+h}}}},open(sys.argv[2],"w"))' \
+    "$sb/home/victim" "$sb/home/cloned/.ai-personal-install.json"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "no record at the scope root: exits 0" 0 "$code"
+  assert_contains "no record at the scope root: says so" "$out" "no install record at"
+  assert_exists "a record elsewhere under \$HOME is not used" "$sb/home/victim"
+  # a symlink to a sibling project's scope root is never followed out of \$PWD
+  sb="$(new_sandbox)"; mkdir "$sb/other"
+  ( cd "$sb/other" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  n="$(count_files "$sb/other")"
+  ln -s ../other/.claude "$sb/cwd/evil"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "sibling via another name: exits 0" 0 "$code"
+  assert_exit "sibling via another name: nothing deleted outside \$PWD" "$n" "$(count_files "$sb/other")"
+  rm "$sb/cwd/evil"; ln -s ../other/.claude "$sb/cwd/.claude"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "sibling as the scope root: exits 1" 1 "$code"
+  assert_contains "sibling as the scope root: says why" "$out" "outside"
+  assert_exit "sibling as the scope root: nothing deleted outside \$PWD" "$n" "$(count_files "$sb/other")"
+  # a corrupt real record is refused even when another record exists; a valid one ignores the other
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  mkdir "$sb/cwd/vendor"; cp "$rec" "$sb/cwd/vendor/.ai-personal-install.json"; cp "$rec" "$sb/good.json"
+  { printf '<<<<<<< HEAD\n'; cat "$sb/good.json"; } > "$rec"
+  n="$(count_files "$sb/cwd")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "corrupt record: exits 1" 1 "$code"
+  assert_contains "corrupt record: says why" "$out" "not valid JSON"
+  assert_exit "corrupt record: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+  cp "$sb/good.json" "$rec"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "second record elsewhere: exits 0" 0 "$code"
+  assert_exit "second record elsewhere: everything installed removed, that record kept" 1 "$(count_files "$sb/cwd")"
+  cmp -s "$sb/good.json" "$sb/cwd/vendor/.ai-personal-install.json" && _ok "second record elsewhere: untouched" || _fail "second record elsewhere: untouched"
+}
+
+test_uninstall_keeps_modified_asset_and_user_files() {
+  _head "--uninstall keeps a modified asset whole; --force lists it, then deletes it"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  printf 'edit\n' >> "$d/atomic-commits/SKILL.md"
+  printf 'mine\n' > "$d/plan-dag/MINE.md"
+  printf 'PRECIOUS\n' > "$sb/precious"; ln -s "$sb/precious" "$rec.tmp"   # a planted temp link is never followed
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "the planted temp link's target is untouched" "$(cat "$sb/precious")" "PRECIOUS"
+  assert_missing "the record is rewritten through a fresh temp file" "$rec.tmp"
+  assert_contains "names the modified file" "$out" "modified: .claude/skills/atomic-commits/SKILL.md"
+  assert_exists "the modified file is kept" "$d/atomic-commits/SKILL.md"
+  assert_exists "the rest of that asset is kept too" "$d/atomic-commits/USAGE.md"
+  assert_missing "an unmodified asset is removed" "$d/plan-dag/SKILL.md"
+  assert_exists "a user-added file in an asset dir survives, so its dir is not pruned" "$d/plan-dag/MINE.md"
+  assert_contains "the record keeps only the kept asset" "$(record_json "$rec" 'sorted(d["assets"])')" "['skills/atomic-commits']"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "--force: exits 0" 0 "$code"
+  assert_contains "--force: lists the modified path before deleting anything" "${out%%removed*}" "atomic-commits/SKILL.md"
+  assert_missing "--force: the modified asset is removed" "$d/atomic-commits"
+  assert_missing "--force: the emptied record is deleted" "$rec"
+  assert_exists "--force: the user-added file still survives" "$d/plan-dag/MINE.md"
+}
+
+test_uninstall_path_guards_abort_before_deleting() {
+  _head "--uninstall aborts on any unsafe recorded path, deleting nothing"
+  local sb out code rec n bad
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  mkdir "$sb/outside"; printf 'PRECIOUS\n' > "$sb/outside/f"; ln -s "$sb/outside" "$sb/cwd/.claude/esc"
+  mkdir "$sb/cwd/.git"; printf 'ref: refs/heads/main\n' > "$sb/cwd/.git/HEAD"; ln -s .git "$sb/cwd/glink"
+  cp "$rec" "$sb/pristine.json"; n="$(count_files "$sb/cwd")"
+  for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f' \
+      $'.claude/a\e[2K' '.claude/a<NUL>b' '.claude/a<RLO>dm.LLIKS' '.git/HEAD' '.GIT/HEAD' 'glink/HEAD'; do
+    cp "$sb/pristine.json" "$rec"
+    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0").replace("<RLO>","\u202e"):"sha256:0"}}' "$bad"
+    out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+    assert_exit "path '$bad': exits 1" 1 "$code"
+    assert_contains "path '$bad': says why" "$out" "unsafe path"
+    assert_not_contains "path '$bad': no traceback" "$out" "Traceback"
+    [[ "$out" != *$'\e[2K'* && "$out" != *"$(printf '\342\200\256')"* ]] && _ok "path '$bad': no raw escape printed" || _fail "path '$bad': no raw escape printed"
+    assert_exit "path '$bad': nothing deleted" "$n" "$(count_files "$sb/cwd")"
+  done
+  assert_contains "the escape target is untouched" "$(cat "$sb/outside/f")" "PRECIOUS"
+  cp "$sb/pristine.json" "$rec"
+  rec_edit "$rec" 'a=d["assets"]; a["skills/x\x1b[2K"]=a.pop("skills/atomic-commits")'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "control character in an asset name: exits 1" 1 "$code"
+  assert_contains "control character in an asset name: says why" "$out" "unsafe asset name"
+  assert_exit "control character in an asset name: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+  sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{".claude/x":"sha256:0"}}'
+  n="$(count_files "$sb/home")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "user scope, path not ~/-anchored: exits 1" 1 "$code"
+  assert_exit "user scope, path not ~/-anchored: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # user-scope paths are confined to the scope root, even with the right hashes
+  mkdir "$sb/home/.ssh"; printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  rec_edit "$rec" 'import hashlib,os; h=lambda f: "sha256:"+hashlib.sha256(open(os.path.join(sys.argv[3],f),"rb").read()).hexdigest(); d["assets"]["skills/zz"]={"files":{"~/"+f:h(f) for f in (".zshrc",".ssh/id_ed25519")}}' "$sb/home"
+  n="$(count_files "$sb/home")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "user scope, path outside the scope root: exits 1" 1 "$code"
+  assert_contains "user scope, path outside the scope root: says why" "$out" "outside the scope root"
+  assert_exit "user scope, path outside the scope root: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # .GIT through a symlinked .git: on a case-insensitive file system it resolves to gitdir/HEAD, so
+  # only the case-insensitive text rule sees it (on a case-sensitive one the resolved rule also does)
+  sb="$(new_sandbox)"; mkdir -p "$sb/cwd/.claude" "$sb/cwd/gitdir"; printf 'ref\n' > "$sb/cwd/gitdir/HEAD"; ln -s gitdir "$sb/cwd/.git"
+  printf '{"version":1,"harness":"claude-code","scope":"project","assets":{"skills/zz":{"files":{".GIT/HEAD":"sha256:0"}}}}' \
+    > "$sb/cwd/.claude/.ai-personal-install.json"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "'.GIT/HEAD' via a symlinked .git: exits 1" 1 "$code"
+  assert_exists "'.GIT/HEAD' via a symlinked .git: nothing deleted" "$sb/cwd/gitdir/HEAD"
+}
+
+# write_rec <out> <harness> <scope> <base> <key prefix> <file...>: a one-asset record listing each
+# file (relative to <base>) under "<key prefix><file>" with its real sha256.
+write_rec() {
+  python3 -c 'import hashlib,json,os,sys; o,h,s,b,p=sys.argv[1:6]; json.dump({"version":1,"harness":h,"scope":s,"assets":{"skills/zz":{"files":{p+f:"sha256:"+hashlib.sha256(open(os.path.join(b,f),"rb").read()).hexdigest() for f in sys.argv[6:]}}}},open(o,"w"))' "$@"
+}
+
+test_uninstall_confined_when_the_record_is_in_home() {
+  _head "--uninstall confines every record read from \$HOME to its scope root"
+  local sb out code n src
+  # a project-scope record read from $HOME is confined like a user-scope one
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude" "$sb/home/.ssh"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home" "" .zshrc .ssh/id_ed25519
+  n="$(count_files "$sb/home")"
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "project scope from \$HOME: exits 1" 1 "$code"
+  assert_contains "project scope from \$HOME: says why" "$out" "outside the scope root"
+  assert_exit "project scope from \$HOME: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # a real project install made from $HOME still round-trips
+  sb="$(new_sandbox)"
+  ( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "project install from \$HOME: uninstall exits 0" 0 "$code"
+  assert_exit "project install from \$HOME: no file left" 0 "$(count_files "$sb/home")"
+  # a scope root that is $HOME itself (a hostile harnesses.json) confines nothing, so it is refused
+  sb="$(new_sandbox)"; src="$sb/fake_src"; mkdir -p "$src/scripts" "$src/skills/s1"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/"; printf -- '---\nname: s1\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+  printf '{"h":{"label":"H","scopes":{"user":"~"},"mapping":{"skills":"skills/{name}"}}}' > "$src/scripts/harnesses.json"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"
+  write_rec "$sb/home/.ai-personal-install.json" h user "$sb/home" "~/" .zshrc
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$src" --uninstall --harness h --scope user </dev/null 2>&1 )"; code=$?
+  assert_exit "scope root ~: exits 1" 1 "$code"
+  assert_contains "scope root ~: says why" "$out" "itself"
+  assert_exists "scope root ~: nothing deleted" "$sb/home/.zshrc"
+  # a symlinked directory inside the scope root can't lead out of it
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude/skills" "$sb/home/Projects/foo"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'mine\n' > "$sb/home/Projects/foo/README.md"
+  ln -s .. "$sb/home/.claude/up"; ln -s ../../Projects/foo "$sb/home/.claude/skills/foo"
+  for f in up/.zshrc skills/foo/README.md; do
+    write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code user "$sb/home/.claude" "~/.claude/" "$f"
+    out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+    assert_exit "~/.claude/$f via a symlinked dir: exits 1" 1 "$code"
+    assert_contains "~/.claude/$f via a symlinked dir: says why" "$out" "resolves outside the scope root"
+  done
+  # the same through a project-scope record read from $HOME
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home/.claude" ".claude/" up/.zshrc
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit ".claude/up/.zshrc from \$HOME: exits 1" 1 "$code"
+  assert_contains ".claude/up/.zshrc from \$HOME: says why" "$out" "resolves outside the scope root"
+  assert_exists "~/.zshrc untouched" "$sb/home/.zshrc"
+  assert_exists "~/Projects/foo/README.md untouched" "$sb/home/Projects/foo/README.md"
+}
+
+# Confinement compares directories by identity, so another spelling of $HOME (letter case,
+# a firmlink) or a $HOME inside the project directory can't switch it off.
+test_uninstall_confinement_by_identity() {
+  _head "--uninstall confines a record whose base is \$HOME, however it is spelled, or contains it"
+  local sb out code n v
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude" "$sb/home/.ssh"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home" "" .zshrc .ssh/id_ed25519
+  n="$(count_files "$sb/home")"
+  for v in "$sb/HOME" "/System/Volumes/Data$(cd "$sb/home" && pwd -P)"; do
+    if [[ ! -d "$v" || ! "$v" -ef "$sb/home" ]]; then _skip "no other spelling of \$HOME here: $v"; continue; fi
+    out="$( cd "$v" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+    assert_exit "from $v: exits 1" 1 "$code"
+    assert_contains "from $v: says why" "$out" "outside the scope root"
+    assert_exit "from $v: nothing deleted" "$n" "$(count_files "$sb/home")"
+  done
+  # $HOME inside the project directory
+  sb="$(new_sandbox)"; mkdir -p "$sb/cwd/.claude" "$sb/cwd/.home/.ssh"
+  printf 'alias x=y\n' > "$sb/cwd/.home/.zshrc"; printf 'KEY\n' > "$sb/cwd/.home/.ssh/id_ed25519"
+  write_rec "$sb/cwd/.claude/.ai-personal-install.json" claude-code project "$sb/cwd" "" .home/.zshrc .home/.ssh/id_ed25519
+  n="$(count_files "$sb/cwd")"
+  out="$( cd "$sb/cwd" && HOME="$sb/cwd/.home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "\$HOME under the project: exits 1" 1 "$code"
+  assert_contains "\$HOME under the project: says why" "$out" "outside the scope root"
+  assert_exit "\$HOME under the project: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+}
+
+# Legit round trips the confinement must not break.
+test_uninstall_round_trips_around_home() {
+  _head "--uninstall round trips: copilot in a project under \$HOME, ~/.claude symlinked to dotfiles"
+  local sb out code
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/P"
+  ( cd "$sb/home/P" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness copilot --scope project --yes-deps </dev/null >/dev/null 2>&1 )
+  assert_exists "copilot in ~/P: a project-root file was placed" "$sb/home/P/Makefile"
+  out="$( cd "$sb/home/P" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness copilot --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "copilot in ~/P: exits 0" 0 "$code"
+  assert_exit "copilot in ~/P: no file left" 0 "$(count_files "$sb/home/P")"
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/dotfiles/claude"; ln -s dotfiles/claude "$sb/home/.claude"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "~/.claude symlinked to dotfiles: exits 0" 0 "$code"
+  assert_exit "~/.claude symlinked to dotfiles: no file left" 0 "$(count_files "$sb/home/dotfiles")"
+}
+
+# The project root is never pruned, even when it sits inside the scope root.
+test_uninstall_prune_stops_at_cwd() {
+  _head "--uninstall never prunes the directory it runs from"
+  local sb out code rec
+  sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  mkdir "$sb/home/.claude/p"; printf 'x\n' > "$sb/home/.claude/p/f"
+  rec_edit "$rec" 'import hashlib; d["assets"]["skills/zz"]={"files":{"~/.claude/p/f":"sha256:"+hashlib.sha256(b"x\n").hexdigest()}}'
+  out="$( cd "$sb/home/.claude/p" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope user </dev/null 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_missing "the recorded file is removed" "$sb/home/.claude/p/f"
+  [[ -d "$sb/home/.claude/p" ]] && _ok "the directory it ran from stays" || _fail "the directory it ran from stays"
+}
+
+test_uninstall_refuses_bad_or_missing_record() {
+  _head "--uninstall refuses a missing, corrupt or foreign record"
+  local sb out code n bad i
+  sb="$(new_sandbox)"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "no record: exits 0" 0 "$code"
+  assert_contains "no record: says so" "$out" "no install record at"
+  # project scope run from $HOME writes the record --scope user would read
+  ( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  n="$(count_files "$sb/home")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "foreign scope: exits 1" 1 "$code"
+  assert_contains "foreign scope: names both" "$out" "belongs to claude-code/project, not claude-code/user"
+  assert_exit "foreign scope: nothing deleted" "$n" "$(count_files "$sb/home")"
+  for bad in '{bad' '{"version":2,"harness":"claude-code","scope":"user","assets":{}}' '{"version":1,"harness":"claude-code","scope":"user","assets":{"s":{"files":[]}}}' \
+      '{"version":1,"harness":"claude-code\u001b[2K","scope":"user","assets":{}}'; do
+    printf '%s' "$bad" > "$sb/home/.claude/.ai-personal-install.json"
+    out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+    assert_exit "record '$bad': exits 1" 1 "$code"
+    assert_contains "record '$bad': clean message" "$out" "install record"
+    assert_not_contains "record '$bad': no traceback" "$out" "Traceback"
+    assert_not_contains "record '$bad': no raw escape printed" "$out" $'\e[2K'
+    assert_exit "record '$bad': nothing deleted" "$n" "$(count_files "$sb/home")"
+  done
+  # a FIFO record must be refused, never opened (a stuck reader is released after 60s)
+  rm "$sb/home/.claude/.ai-personal-install.json"; mkfifo "$sb/home/.claude/.ai-personal-install.json"
+  ( run_uninstall "$sb" --harness claude-code --scope user </dev/null > "$sb/fifo.out" 2>&1; echo $? > "$sb/fifo.code" ) &
+  i=0; while [[ ! -f "$sb/fifo.code" && $i -lt 60 ]]; do sleep 1; i=$((i + 1)); done
+  [[ -f "$sb/fifo.code" ]] && _ok "FIFO record: returns without waiting on it" || _fail "FIFO record: returns without waiting on it"
+  python3 -c 'import os,sys; os.close(os.open(sys.argv[1], os.O_WRONLY|os.O_NONBLOCK))' "$sb/home/.claude/.ai-personal-install.json" 2>/dev/null
+  wait
+  assert_exit "FIFO record: exits 1" 1 "$(cat "$sb/fifo.code")"
+  assert_contains "FIFO record: says why" "$(cat "$sb/fifo.out")" "not a regular file"
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't hide the record"; return; fi
+  rm "$sb/home/.claude/.ai-personal-install.json"; chmod 000 "$sb/home/.claude"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  chmod 755 "$sb/home/.claude"
+  assert_exit "unreadable scope root: exits 1" 1 "$code"
+  assert_not_contains "unreadable scope root: not reported as a missing record" "$out" "no install record"
+}
+
+test_uninstall_unreadable_asset_dir_aborts() {
+  _head "--uninstall aborts cleanly when it can't check a recorded path"
+  local sb out code d n
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block lstat"; return; fi
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  n="$(count_files "$sb/cwd")"; chmod 000 "$d/plan-dag"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  chmod 755 "$d/plan-dag"
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "says which path" "$out" "cannot check"
+  assert_not_contains "no traceback" "$out" "Traceback"
+  assert_exit "nothing deleted" "$n" "$(count_files "$sb/cwd")"
+}
+
+test_uninstall_keeps_shared_record_and_scope_root() {
+  _head "--uninstall keeps paths another asset claims, the record file and the scope root"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir "$sb/cwd/realroot"; ln -s realroot "$sb/cwd/.claude"   # a symlinked scope root must not be unlinked
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" 'f=d["assets"]["skills/atomic-commits"]["files"]; d["assets"]["suites/x"]={"files":{k:v for k,v in f.items() if k.endswith("/SKILL.md")}}; d["assets"]["skills/plan-dag"]["files"].update({".claude":"sha256:0",".claude/.ai-personal-install.json":"sha256:0"})'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --assets skills --force </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "a file also claimed by an asset not uninstalled is kept" "$d/atomic-commits/SKILL.md"
+  assert_missing "the rest of that asset is removed" "$d/atomic-commits/USAGE.md"
+  assert_missing "a skill listing the record and scope root is still removed" "$d/plan-dag"
+  [[ -L "$sb/cwd/.claude" ]] && _ok "the scope root symlink is kept" || _fail "the scope root symlink is kept"
+  assert_not_contains "the record file itself is never deleted" "$out" "removed .claude/.ai-personal-install.json"
+  assert_contains "the record is kept, with the other asset" "$(record_json "$rec" 'sorted(d["assets"])')" "['suites/x']"
+}
+
+test_uninstall_file_shared_by_two_uninstalled_assets() {
+  _head "--uninstall with a file two uninstalled assets share"
+  local sb out code d rec share='a=d["assets"]; k=".claude/skills/atomic-commits/SKILL.md"; a["skills/plan-dag"]["files"][k]=a["skills/atomic-commits"]["files"][k]'
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" "$share"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "both removed: exits 0" 0 "$code"
+  assert_missing "both removed: the shared file is gone" "$d/atomic-commits/SKILL.md"
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  rec_edit "$rec" "$share"; printf 'edit\n' >> "$d/atomic-commits/USAGE.md"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "one kept as modified: exits 0" 0 "$code"
+  assert_exists "one kept as modified: the file it shares is kept" "$d/atomic-commits/SKILL.md"
+  assert_missing "one kept as modified: the other asset is removed" "$d/plan-dag"
+}
+
+test_uninstall_compares_files_not_spellings() {
+  _head "--uninstall compares files, not path spellings (case-insensitive file systems)"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  if [[ ! -e "$sb/cwd/.CLAUDE" ]]; then _skip "case-sensitive file system"; return; fi
+  rec_edit "$rec" 'a=d["assets"]; a["skills/atomic-commits"]["files"][".CLAUDE/.ai-personal-install.json"]="sha256:0"; a["suites/x"]={"files":{".CLAUDE/skills/plan-dag/SKILL.md":a["skills/plan-dag"]["files"][".claude/skills/plan-dag/SKILL.md"]}}'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --assets skills --force </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_not_contains "the record under another spelling is not deleted" "$out" "removed .CLAUDE/.ai-personal-install.json"
+  assert_exists "a staying asset's claim under another spelling protects the file" "$d/plan-dag/SKILL.md"
+}
+
+test_uninstall_prune_stops_at_symlinked_dir() {
+  _head "--uninstall prunes along the recorded path and stops at a symlinked directory"
+  local sb out code
+  sb="$(new_sandbox)"
+  mkdir -p "$sb/cwd/dotfiles/claude-skills" "$sb/cwd/.claude"; ln -s ../dotfiles/claude-skills "$sb/cwd/.claude/skills"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exit "every installed file removed" 0 "$(count_files "$sb/cwd/dotfiles")"
+  [[ -L "$sb/cwd/.claude/skills" && -d "$sb/cwd/.claude/skills" ]] \
+    && _ok "the symlinked dir and its target stay" || _fail "the symlinked dir and its target stay"
+}
+
+test_uninstall_skips_what_is_not_a_file() {
+  _head "--uninstall never opens or deletes a FIFO or directory at a recorded path"
+  local sb out code d rec
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills/atomic-commits"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  mkfifo "$d/fifo"; mkdir "$d/dir"; ln -s fifo "$d/lnk"
+  rec_edit "$rec" 'f=d["assets"]["skills/atomic-commits"]["files"]; f.update({".claude/skills/atomic-commits/"+n:"sha256:0" for n in ("fifo","dir","lnk")})'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "the FIFO is not a file" "$out" "atomic-commits/fifo (not a file)"
+  assert_contains "the directory is not a file" "$out" "atomic-commits/dir (not a file)"
+  [[ -p "$d/fifo" && -d "$d/dir" ]] && _ok "both are kept" || _fail "both are kept"
+  [[ ! -L "$d/lnk" ]] && _ok "--force: the symlink to the FIFO is unlinked" || _fail "--force: the symlink to the FIFO is unlinked"
+}
+
+test_uninstall_unlinks_symlink_without_following() {
+  _head "--uninstall unlinks a symlink in the way, never its target"
+  local sb out code f
+  sb="$(new_sandbox)"; f="$sb/cwd/.claude/skills/atomic-commits/SKILL.md"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  printf 'PRECIOUS\n' > "$sb/precious"; rm "$f"; ln -s "$sb/precious" "$f"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  [[ -L "$f" ]] && _ok "a symlink counts as modified: kept without --force" || _fail "a symlink counts as modified: kept without --force"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "--force: exits 0" 0 "$code"
+  [[ ! -L "$f" && ! -e "$f" ]] && _ok "--force: the link is gone" || _fail "--force: the link is gone"
+  assert_contains "--force: its target is untouched" "$(cat "$sb/precious")" "PRECIOUS"
+}
+
+test_uninstall_dry_run_and_flag_conflicts() {
+  _head "--uninstall --dry-run changes nothing; conflicting flags are refused"
+  local sb out code rec n f
+  sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  printf 'edit\n' >> "$sb/cwd/.claude/skills/atomic-commits/SKILL.md"
+  rec_edit "$rec" 'pass'   # compact JSON, so any rewrite shows up in cmp
+  cp "$rec" "$sb/before.json"; n="$(count_files "$sb/cwd")"
+  for f in "" --force; do
+    out="$(run_uninstall "$sb" --harness claude-code --scope project --dry-run $f </dev/null 2>&1)"; code=$?
+    assert_exit "--dry-run $f: exits 0" 0 "$code"
+    assert_contains "--dry-run $f: lists what it would remove" "$out" "would remove"
+    assert_contains "--dry-run $f: lists the modified file" "$out" "modified: .claude/skills/atomic-commits/SKILL.md"
+    assert_exit "--dry-run $f: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+    cmp -s "$sb/before.json" "$rec" && _ok "--dry-run $f: record untouched" || _fail "--dry-run $f: record untouched"
+  done
+  for f in --yes-deps --no-deps; do
+    out="$(run_uninstall "$sb" --harness claude-code --scope project $f </dev/null 2>&1)"; code=$?
+    assert_exit "$f: exits 1" 1 "$code"
+    assert_contains "$f: explains the conflict" "$out" "cannot be combined with --uninstall"
+  done
+  assert_exit "conflicting flags: nothing deleted" "$n" "$(count_files "$sb/cwd")"
+}
+
+test_uninstall_failed_delete_keeps_record_honest() {
+  _head "a delete that fails part-way exits 1 and keeps what's left in the record"
+  local sb out code d rec
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block unlink"; return; fi
+  sb="$(new_sandbox)"; d="$sb/cwd/.claude/skills"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
+  chmod 555 "$d/plan-dag"
+  out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
+  chmod -R u+w "$sb/cwd/.claude"
+  assert_exit "exits 1" 1 "$code"
+  assert_not_contains "no traceback" "$out" "Traceback"
+  assert_missing "other assets are removed" "$d/atomic-commits"
+  assert_contains "the record keeps only the stuck asset" "$(record_json "$rec" 'sorted(d["assets"])')" "['skills/plan-dag']"
+  assert_record "what the record still lists is on disk" "$rec" "$sb/cwd" "$sb/home" 0
+}
+
+test_uninstall_round_trip
+test_uninstall_reads_only_the_scope_root_record
+test_uninstall_keeps_modified_asset_and_user_files
+test_uninstall_path_guards_abort_before_deleting
+test_uninstall_prune_stops_at_cwd
+test_uninstall_confined_when_the_record_is_in_home
+test_uninstall_confinement_by_identity
+test_uninstall_round_trips_around_home
+test_uninstall_refuses_bad_or_missing_record
+test_uninstall_unreadable_asset_dir_aborts
+test_uninstall_keeps_shared_record_and_scope_root
+test_uninstall_file_shared_by_two_uninstalled_assets
+test_uninstall_compares_files_not_spellings
+test_uninstall_prune_stops_at_symlinked_dir
+test_uninstall_skips_what_is_not_a_file
+test_uninstall_unlinks_symlink_without_following
+test_uninstall_dry_run_and_flag_conflicts
+test_uninstall_failed_delete_keeps_record_honest
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"
