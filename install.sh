@@ -740,7 +740,9 @@ apply_selection() {
       [[ "$transform" != "-" ]] && note="  (translated: $transform)"
       if [[ "$mode" != item && ( -d "$dest" || -L "$dest" ) ]]; then
         printf '  [dry-run] %-9s %s -> %s  (not a regular file, would skip)\n' "$category" "$src_rel" "$dest"
-      elif [[ -e "$dest" && "$mode" == merge && $FORCE -ne 1 ]]; then
+      elif [[ -e "$dest" && $FORCE -eq 1 ]]; then
+        printf '  [dry-run] %-9s %s -> %s  (exists, would overwrite)%s\n' "$category" "$src_rel" "$dest" "$note"
+      elif [[ -e "$dest" && "$mode" == merge ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, merge would leave it untouched)\n' "$category" "$src_rel" "$dest"
       elif [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
@@ -759,7 +761,7 @@ apply_selection() {
         _warn "skip (not a regular file): $dest"
       elif [[ -e "$dest" && $FORCE -ne 1 ]]; then
         if [[ "$mode" == merge ]]; then
-          MERGE_KEPT="$MERGE_KEPT $dest"
+          MERGE_KEPT="$MERGE_KEPT"$'\n'"        $dest_spec"
         else
           _warn "skip (exists): $dest — use --force to overwrite"
         fi

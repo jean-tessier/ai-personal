@@ -1255,6 +1255,10 @@ test_merge_leaves_existing_files_and_lists_them_once() {
   assert_contains "instructions untouched" "$(cat "$sb/cwd/.github/copilot-instructions.md")" "MINE3"
   assert_exists "the missing file is still created" "$sb/cwd/scripts/run.sh"
   assert_contains "summary names a skipped file" "$out" "scripts/two.sh"
+  printf 'sp\n' > "$src/suites/fx/copilot/scripts/my file.sh"; printf 'MINE4\n' > "$sb/cwd/scripts/my file.sh"
+  out="$(fx_install "$sb" "$src" --harness copilot)"
+  assert_contains "a path with a space is on its own line" "$(printf '%s\n' "$out" | grep -c '^ *scripts/my file.sh$')" "1"
+  assert_contains "another kept file is on its own line" "$(printf '%s\n' "$out" | grep -c '^ *scripts/two.sh$')" "1"
   n="$(printf '%s\n' "$out" | grep -c "left existing")"
   [[ "$n" == 1 ]] && _ok "summary line appears exactly once" || _fail "summary line count: $n"
 }
@@ -1313,6 +1317,18 @@ test_merge_dry_run_lists_create_vs_skip() {
   assert_contains "existing file untouched" "$(cat "$sb/cwd/scripts/one.sh")" "MINE"
 }
 test_merge_dry_run_lists_create_vs_skip
+
+test_merge_dry_run_force_says_overwrite() {
+  _head "merge --dry-run --force says would overwrite, matching the real run"
+  local sb src out
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  mkdir -p "$sb/cwd/scripts"; printf 'MINE\n' > "$sb/cwd/scripts/one.sh"
+  out="$(fx_install "$sb" "$src" --harness copilot --dry-run --force)"
+  assert_contains "says would overwrite" "$out" "scripts/one.sh  (exists, would overwrite)"
+  assert_not_contains "no would-skip on that line" "$(printf '%s\n' "$out" | grep 'one.sh')" "would skip"
+  assert_contains "file untouched" "$(cat "$sb/cwd/scripts/one.sh")" "MINE"
+}
+test_merge_dry_run_force_says_overwrite
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
