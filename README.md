@@ -71,6 +71,11 @@ Harness/scope keys come from `scripts/harnesses.json`:
 
 `copilot` has no `user` scope — don't pass `--scope user` with `--harness copilot`.
 
+Each real install also writes `.ai-personal-install.json` in the scope root (for example
+`.claude/.ai-personal-install.json`), listing every file it placed with its sha256 and the `--ref`
+it came from. Re-installs merge into it; `--dry-run` doesn't write it. See
+[ADR-0012](docs/adrs/ADR-0012-install-record.md).
+
 Any asset can declare dependencies on other assets in a colocated `dependencies.json` (a flat
 array of repo-relative paths, e.g. `["skills/create-adr", "skills/yaml-frontmatter"]` for
 `handoff-workflow`) — see
