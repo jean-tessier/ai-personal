@@ -118,6 +118,59 @@ sys.exit(0 if isinstance(data.get('name'), str) and data['name'].strip() else 1)
   fi
 }
 
+# Check a suite's optional manifest.json (ADR-0008): keyed by harnesses.json keys,
+# each value an array of {kind, src, mode}; kind must be defined in that harness's
+# resourceKinds; src must exist under the suite, relative, with no '..' segment.
+check_manifest_json() {
+  local label="$1" dir="$2"
+  local file="$dir/manifest.json"
+  [[ -f "$file" ]] || return 0
+  if ! validate_json "$file"; then
+    _fail "$label/manifest.json — invalid JSON"
+    return
+  fi
+  if ! command -v python3 &>/dev/null; then
+    _warn "python3 not found; skipping manifest.json checks: $label"
+    return
+  fi
+  local errs=0 msg py
+  # (Python lives in a variable, not a <(...) heredoc: bash 3.2 mis-parses heredoc bodies inside <(...).)
+  read -r -d '' py <<'PY' || true
+import json, os, sys
+
+KINDS = {"agents", "skills", "instructions", "hooks", "config"}
+manifest, suite, hfile = sys.argv[1:4]
+data = json.load(open(manifest))
+harnesses = json.load(open(hfile))
+if not isinstance(data, dict):
+    sys.exit(print("must be an object keyed by harness name"))
+for h, placements in data.items():
+    if h not in harnesses:
+        print(f"unknown harness key '{h}'"); continue
+    if not isinstance(placements, list):
+        print(f"{h}: must be an array of placements"); continue
+    defined = {k for sc in (harnesses[h].get("resourceKinds") or {}).values() for k in sc}
+    for i, p in enumerate(placements):
+        at = f"{h}[{i}]"
+        if not isinstance(p, dict) or set(p) != {"kind", "src", "mode"}:
+            print(f"{at}: must be an object with exactly kind, src, mode"); continue
+        if p["kind"] not in KINDS: print(f"{at}: unknown kind '{p['kind']}'")
+        elif p["kind"] not in defined: print(f"{at}: kind '{p['kind']}' not in {h}'s resourceKinds")
+        if p["mode"] not in ("copy", "merge"): print(f"{at}: mode must be copy or merge")
+        src = p["src"]
+        if not isinstance(src, str) or not src: print(f"{at}: src must be a non-empty string")
+        elif src.startswith("/") or {"", ".", ".."} & set(src.split("/")): print(f"{at}: src must be relative with no '.', '..' or empty segments")
+        elif not os.path.exists(os.path.join(suite, src)): print(f"{at}: src does not exist: {src}")
+PY
+  while IFS= read -r msg; do
+    [[ -z "$msg" ]] && continue
+    ((errs++)) || true
+    _fail "$label/manifest.json — $msg"
+  done < <({ python3 -c "$py" "$file" "$dir" "$REPO/scripts/harnesses.json" || echo "check crashed (python traceback above)"; } | tr -d '\r')
+  [[ $errs -eq 0 ]] && _ok "$label/manifest.json"
+  return 0
+}
+
 # ── Suites ────────────────────────────────────────────────────────────────────
 _head "suites"
 suite_count=0
@@ -135,6 +188,7 @@ while IFS= read -r -d '' dir; do
   else _fail "suites/$name/ — no grouped prompt files found in a component subdirectory"; fi
 
   check_dependencies_json "suites/$name" "$dir"
+  check_manifest_json "suites/$name" "$dir"
 
   validate_plugin_manifest "$dir" "suites/$name"
   # Multi-harness suites (ADR-0006) carry their plugin.json inside a harness-variant
@@ -233,6 +287,32 @@ for name, h in sorted(data.items()):
     print(f"{name}\t{label_ok}\t{scopes_n}\t{mapping_n}")
 PY
 )
+
+      # ADR-0008 vocabulary: a typo'd mapping key must fail, not silently read as "unsupported".
+      # (Python lives in a variable, not a <(...) heredoc: bash 3.2 mis-parses heredoc bodies inside <(...).)
+      read -r -d '' lint_py <<'PY' || true
+import json, re, sys
+
+KINDS = {"agents", "skills", "instructions", "hooks", "config"}
+PLACEHOLDERS = {"suite", "basename", "relpath"}
+for name, h in sorted(json.load(open(sys.argv[1])).items()):
+    for k in h.get("mapping") or {}:
+        if k not in ("skills", "suites"): print(f"{name}.mapping — unknown category '{k}'")
+    scopes = h.get("scopes") or {}
+    for scope, kinds in (h.get("resourceKinds") or {}).items():
+        if scope not in scopes: print(f"{name}.resourceKinds — scope '{scope}' not in scopes")
+        for kind, tmpl in (kinds or {}).items():
+            if kind not in KINDS: print(f"{name}.resourceKinds.{scope} — unknown kind '{kind}'")
+            bad = set(re.findall(r"\{([^}]*)\}", tmpl)) - PLACEHOLDERS
+            if bad: print(f"{name}.resourceKinds.{scope}.{kind} — unknown placeholder(s) {sorted(bad)}")
+PY
+      lint_errs=0
+      while IFS= read -r msg; do
+        [[ -z "$msg" ]] && continue
+        ((lint_errs++)) || true
+        _fail "harnesses.$msg"
+      done < <({ python3 -c "$lint_py" "$harnesses_file" || echo "json — vocabulary lint crashed (python traceback above)"; } | tr -d '\r')
+      [[ $lint_errs -eq 0 ]] && _ok "harnesses mapping/resourceKinds vocabulary"
     else
       _warn "python3 not found; skipping per-harness structural checks"
     fi

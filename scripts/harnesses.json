@@ -8,6 +8,16 @@
     "mapping": {
       "skills": "skills/{name}",
       "suites": "suites/{name}"
+    },
+    "resourceKinds": {
+      "project": {
+        "agents": ".claude/suites/{suite}/agents/{basename}",
+        "config": ".claude/suites/{suite}/{relpath}"
+      },
+      "user": {
+        "agents": "~/.claude/suites/{suite}/agents/{basename}",
+        "config": "~/.claude/suites/{suite}/{relpath}"
+      }
     }
   },
   "copilot": {
@@ -18,6 +28,15 @@
     "mapping": {
       "skills": "skills/{name}",
       "suites": "suites/{name}"
+    },
+    "resourceKinds": {
+      "project": {
+        "agents": ".github/agents/{basename}",
+        "skills": ".github/skills/{basename}",
+        "hooks": ".github/hooks/{basename}",
+        "instructions": ".github/copilot-instructions.md",
+        "config": "{relpath}"
+      }
     }
   }
 }
