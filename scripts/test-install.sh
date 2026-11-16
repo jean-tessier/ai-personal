@@ -409,9 +409,9 @@ test_copilot_dep_on_non_plugin_shaped_suite_skipped() {
 # ── fetch path via a stubbed curl (no network) ───────────────────────────────
 # stub_curl <sandbox>: puts a fake `curl` on <sandbox>/bin. It appends its args
 # to <sandbox>/curl.args and writes, to the -o target, a codeload-shaped tarball
-# (top dir ai-personal-main/) of a minimal repo. Portable tar only: no bsdtar -s.
+# (top dir <top>, default ai-personal-main/) of a minimal repo. Portable tar only: no bsdtar -s.
 stub_curl() {
-  local sb="$1" top="$1/fake/ai-personal-main"
+  local sb="$1" name="${2:-ai-personal-main}" top="$1/fake/${2:-ai-personal-main}"
   mkdir -p "$top/scripts" "$top/skills/demo"
   cp "$REPO/scripts/catalog.sh" "$REPO/scripts/harnesses.json" "$top/scripts/"
   printf -- '---\nname: demo\ndescription: stub\n---\n' > "$top/skills/demo/SKILL.md"
@@ -419,7 +419,7 @@ stub_curl() {
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$sb/curl.args"
 while [[ \$# -gt 0 ]]; do [[ "\$1" == -o ]] && out="\$2"; shift; done
-tar -czf "\$out" -C "$sb/fake" ai-personal-main
+tar -czf "\$out" -C "$sb/fake" $name
 STUB
   chmod +x "$sb/bin/curl"
 }
@@ -481,6 +481,60 @@ test_fetch_bad_tarball_exits_1() {
   assert_contains "prints the extraction failure" "$out" "extract failed"
 }
 
+# --ref pins the fetched tree. codeload names the top dir {repo}-{ref} (slashes
+# become dashes, a leading v is dropped from tags), so the stub uses ai-personal-9.
+test_ref_pins_fetched_tree() {
+  _head "--ref (stubbed curl)"
+  local sb out code
+  sb="$(new_sandbox)"
+  stub_curl "$sb" ai-personal-9
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --harness claude-code --scope project --assets skills --ref v9 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "URL carries the ref" "$(cat "$sb/curl.args" 2>&1)" \
+    "https://codeload.github.com/jean-tessier/ai-personal/tar.gz/v9"
+  assert_exists "skill from a non-main top dir installed" "$sb/cwd/.claude/skills/demo/SKILL.md"
+}
+
+test_ref_rejects_bad_values() {
+  _head "--ref validation"
+  local sb out code ref
+  for ref in 'a b' 'v1;rm' '../x' 'a..b' '$(id)' ''; do
+    sb="$(new_sandbox)"
+    stub_curl "$sb"
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --harness claude-code --scope project --ref "$ref" 2>&1 )"; code=$?
+    assert_exit "bad ref '$ref' exits 1" 1 "$code"
+    assert_contains "bad ref '$ref' names --ref" "$out" "--ref"
+    assert_missing "bad ref '$ref' never calls curl" "$sb/curl.args"
+  done
+  # a value flag with no value must fail, not exit 0 (bash 3.2 reports the EXIT trap's status)
+  local args
+  for args in '--ref' '--ref --dry-run'; do
+    sb="$(new_sandbox)"
+    stub_curl "$sb"
+    # shellcheck disable=SC2086
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --harness claude-code --scope project $args 2>&1 )"; code=$?
+    assert_exit "'$args' exits 1" 1 "$code"
+    assert_contains "'$args' says --ref needs a value" "$out" "--ref needs a value"
+    assert_missing "'$args' never calls curl" "$sb/curl.args"
+  done
+  sb="$(new_sandbox)"
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --scope project --harness 2>&1 )"; code=$?
+  assert_exit "--harness with no value exits 1" 1 "$code"
+  assert_contains "--harness says it needs a value" "$out" "--harness needs a value"
+}
+
+test_ref_with_local_fails() {
+  _head "--ref with --local"
+  local sb out code
+  sb="$(new_sandbox)"
+  out="$(run_install "$sb" --harness claude-code --scope project --ref v9 2>&1)"; code=$?
+  assert_exit "exits 1" 1 "$code"
+  assert_contains "explains the conflict" "$out" "--ref cannot be combined with --local"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -508,6 +562,9 @@ test_fetch_via_stubbed_curl
 test_manifest_lint_rejects_bad_manifest
 test_fetch_curl_failure_exits_1
 test_fetch_bad_tarball_exits_1
+test_ref_pins_fetched_tree
+test_ref_rejects_bad_values
+test_ref_with_local_fails
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then

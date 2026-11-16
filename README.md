@@ -51,11 +51,16 @@ curl -fsSL https://raw.githubusercontent.com/jean-tessier/ai-personal/main/insta
 | `--harness <key>` | harness key from `scripts/harnesses.json` (required) |
 | `--scope <key>` | scope key declared for that harness (required) |
 | `--assets <a,b,...>` | comma-separated asset categories (default: all available; omit in a terminal for an interactive picker — see below) |
+| `--ref <ref>` | tag, branch, or commit sha to fetch (default: `main`); see the note below |
 | `--dry-run` | print planned copy operations; write nothing |
 | `--force` | overwrite existing destination files/dirs (default: skip existing) |
 | `--yes-deps` | add declared dependencies without prompting (see below) |
 | `--no-deps` | skip declared dependencies instead of adding or prompting; can't be combined with `--yes-deps` |
 | `-h`, `--help` | show usage |
+
+`--ref` pins the fetched tree, but the piped one-liner still runs whichever `install.sh` you
+download, so fetch `install.sh` itself from the same ref (`.../<ref>/install.sh`). Refs older than
+the `--ref` flag don't support it.
 
 Harness/scope keys come from `scripts/harnesses.json`:
 

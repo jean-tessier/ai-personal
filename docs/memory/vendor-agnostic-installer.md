@@ -78,8 +78,8 @@ To re-run a full real-network fetch test (not just `--local`): package the worki
 is bsdtar's sed-style rename flag, available on stock macOS `tar`), serve it with `python3 -m
 http.server` from a scratch directory, and temporarily point `fetch_source()`'s `url=` at
 `http://127.0.0.1:<port>/...` — revert before finishing, never land a URL override as a permanent
-flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's decision against a
-`--ref` flag).
+flag (rejected as scope creep; see `handoff.md`'s Task 6 record and Task 3's decision, since narrowed:
+the `--ref` flag was later added, see the 2026-11-15 update).
 
 ## macOS bash/awk gotchas discovered building this script
 
@@ -183,3 +183,11 @@ Two `install.sh` behavior changes came with it: a non-interactive run with unres
 and neither `--yes-deps` nor `--no-deps` now **fails closed** (exit 1) instead of silently
 auto-adding, and dependencies are declared as category-prefixed paths (`skills/create-adr`), not
 bare skill names.
+
+**2026-11-15 update**: `install.sh` now has a documented `--ref <tag|branch|sha>` flag (default
+`main`), which **reverses Task 3's decision against a `--ref` flag** in a narrower form. The value
+goes into the codeload URL only, validated against `^[A-Za-z0-9._/-]+$` with no `..`, and it exits 1
+when combined with `--local`. The other half of that decision still holds: there is no arbitrary
+URL-override flag. `fetch_source()` finds the extracted directory with `find`, not by name, so it
+doesn't depend on codeload's `{repo}-{ref}` naming. Tests use the stubbed `curl` (`stub_curl`).
+Users must fetch `install.sh` from the same ref (see README); refs older than this flag don't support it.

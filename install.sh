@@ -12,6 +12,7 @@
 #   --assets <a,b,...>  comma-separated asset categories (default: all available;
 #                       interactively pick per category if omitted and a TTY
 #                       is attached — via fzf, gum, or a numbered prompt)
+#   --ref <ref>         tag, branch, or commit sha to fetch (default: main)
 #   --dry-run           print planned copy operations; write nothing
 #   --force             overwrite existing destination files/dirs (default: skip)
 #   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
@@ -44,12 +45,13 @@ command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force] [--yes-deps|--no-deps]
+Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--ref <ref>] [--dry-run] [--force] [--yes-deps|--no-deps]
 
   --harness   harness key from scripts/harnesses.json (e.g. claude-code, copilot)
   --scope     scope key declared for that harness (e.g. project, user)
   --assets    comma-separated asset categories to install (default: all available;
               if omitted with a TTY attached, pick interactively via fzf/gum/prompt)
+  --ref       tag, branch, or commit sha to fetch (default: main)
   --dry-run   print planned copy operations; write nothing
   --force     overwrite existing destination files/dirs (default: skip existing)
   --yes-deps  auto-add dependencies (from dependencies.json) with no prompt
@@ -65,6 +67,7 @@ DRY_RUN=0
 FORCE=0
 YES_DEPS=0
 NO_DEPS=0
+REF_SET=0
 LOCAL_PATH=""   # test seam: skip network fetch, use a local checkout instead
 
 WORK="$(mktemp -d)"
@@ -164,10 +167,16 @@ PY
 
 parse_args() {
   while [[ $# -gt 0 ]]; do
+    # a missing value must fail here: under set -u, bash 3.2 would exit with the EXIT trap's status (0)
+    case "$1" in
+      --assets|--harness|--scope|--ref|--local)
+        if [[ $# -lt 2 || "$2" == -* ]]; then _fail "$1 needs a value"; usage; exit 1; fi ;;
+    esac
     case "$1" in
       --assets)  ASSETS_RAW="$2"; shift 2 ;;
       --harness) HARNESS="$2"; shift 2 ;;
       --scope)   SCOPE="$2"; shift 2 ;;
+      --ref)     REF="$2"; REF_SET=1; shift 2 ;;
       --dry-run) DRY_RUN=1; shift ;;
       --force)   FORCE=1; shift ;;
       --yes-deps) YES_DEPS=1; shift ;;
@@ -185,6 +194,11 @@ parse_args() {
   if [[ -z "$HARNESS" ]]; then _fail "--harness is required"; usage; exit 1; fi
   if [[ -z "$SCOPE"   ]]; then _fail "--scope is required"; usage; exit 1; fi
   if [[ $YES_DEPS -eq 1 && $NO_DEPS -eq 1 ]]; then _fail "--yes-deps and --no-deps cannot be combined"; usage; exit 1; fi
+  if [[ $REF_SET -eq 1 ]]; then
+    if [[ -n "$LOCAL_PATH" ]]; then _fail "--ref cannot be combined with --local"; usage; exit 1; fi
+    # the ref goes into a URL: allow only ref-ish characters, no path traversal
+    if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ || "$REF" == *..* ]]; then _fail "invalid --ref '$REF' (allowed: letters, digits, . _ / -; no '..')"; usage; exit 1; fi
+  fi
 }
 
 # ── Fetch (no git — curl + tar only) ────────────────────────────────────────
