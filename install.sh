@@ -124,10 +124,12 @@ elif mode == "mapping":
 
 elif mode == "translate":
     harnesses = load(os.environ["HARNESSES_JSON"])
-    t = harnesses.get(args[0], {}).get("translate", {}).get(args[1])
-    if t is None:
+    tr = harnesses.get(args[0], {}).get("translate") or {}
+    if isinstance(tr, dict) and args[1] not in tr:
         sys.exit(1)
-    print(t)
+    # a null or non-string value reaches plan_item's unknown-transform branch (fail closed)
+    t = tr.get(args[1]) if isinstance(tr, dict) else None
+    print(t if isinstance(t, str) else "(invalid)")
 
 elif mode == "categories":
     catalog = load(os.environ["CATALOG_JSON"])
@@ -433,8 +435,9 @@ transform_apply() {
 #     dependencies/skills — are unchanged, since both ecosystems share them).
 #   - agents/*.md -> agents/*.agent.md (Copilot's own filename convention,
 #     already used by this repo's hand-authored Copilot payloads).
-# plan_item() only ever routes pluginShaped suites here for the copilot
-# harness, whether requested or pulled in as a dependency — drop-in Copilot
+# plan_item() only ever routes pluginShaped suites here (via transform_apply)
+# for a harness whose `translate` names copilot-plugin, whether requested or
+# pulled in as a dependency — drop-in Copilot
 # payloads (tiered-escalation-suite, tier-layered-teams/copilot) never reach this
 # function: they have no plugin form, so plan_item() skips them with a note.
 translate_to_copilot() {

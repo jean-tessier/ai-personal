@@ -465,11 +465,28 @@ test_translate_lint_rejects_bad_key() {
   src="$sb/fake_src"
   mkdir -p "$src"
   cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
-  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["copilot"]["translate"]={"suites":"bogus-transform","prompts":"copilot-plugin"}; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["copilot"]["translate"]={"suites":"bogus-transform","prompts":"copilot-plugin","skills":"copilot-plugin"}; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
   out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
   assert_exit "bad translate: exits 1" 1 "$code"
   assert_contains "flags the unknown transform" "$out" "unknown transform 'bogus-transform'"
   assert_contains "flags a category not in mapping" "$out" "category 'prompts' not in mapping"
+  assert_contains "flags a transform on the wrong category" "$out" "does not apply to category 'skills'"
+}
+
+test_translate_unknown_or_invalid_skips() {
+  _head "an unknown or malformed translate value skips the item (fails closed)"
+  local sb src out code bad
+  for bad in None '"bogus"'; do
+    sb="$(new_sandbox)"
+    src="$sb/fake_src"
+    mkdir -p "$src"
+    cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+    python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["copilot"]["translate"]={"suites":eval(sys.argv[2])}; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json" "$bad"
+    out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" bash "$INSTALL" --local "$src" --harness copilot --scope project --assets suites --no-deps </dev/null 2>&1 )"; code=$?
+    assert_exit "translate=$bad: exits 0" 0 "$code"
+    assert_contains "translate=$bad: warns about the transform" "$out" "unknown translate transform"
+    assert_missing "translate=$bad: nothing installed" "$sb/cwd/.github/suites"
+  done
 }
 
 test_fetch_curl_failure_exits_1() {
@@ -575,6 +592,7 @@ test_copilot_dep_on_non_plugin_shaped_suite_skipped
 test_fetch_via_stubbed_curl
 test_manifest_lint_rejects_bad_manifest
 test_translate_lint_rejects_bad_key
+test_translate_unknown_or_invalid_skips
 test_fetch_curl_failure_exits_1
 test_fetch_bad_tarball_exits_1
 test_ref_pins_fetched_tree
