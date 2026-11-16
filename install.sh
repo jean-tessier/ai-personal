@@ -195,8 +195,8 @@ fetch_source() {
   fi
   local url="https://codeload.github.com/${OWNER}/${REPO_NAME}/tar.gz/${REF}"
   _head "fetching ${OWNER}/${REPO_NAME}@${REF}"
-  curl -fsSL "$url" -o "$WORK/src.tar.gz"
-  tar -xzf "$WORK/src.tar.gz" -C "$WORK"
+  if ! curl -fsSL "$url" -o "$WORK/src.tar.gz"; then _fail "fetch failed: $url"; exit 1; fi
+  if ! tar -xzf "$WORK/src.tar.gz" -C "$WORK"; then _fail "extract failed: $WORK/src.tar.gz"; exit 1; fi
   SRC="$(find "$WORK" -mindepth 1 -maxdepth 1 -type d | head -1)"
 }
 
