@@ -163,6 +163,69 @@ elif mode == "suite_plugin_shaped":
     it = find_item(catalog, "suites", args[0])
     sys.exit(0 if it and it.get("pluginShaped") else 1)
 
+elif mode == "placements":
+    # placements <suite> <harness> <scope> <src root>: expand the suite's manifest.json placements
+    # (ADR-0008) into per-file rows. Exit 1: no manifest. Else one stdout line kind per row:
+    #   ERR<TAB>msg (refuse) | OMIT (harness not keyed) | NOTE<TAB>msg | ROW<TAB>src_rel<TAB>dest<TAB>mode
+    suite, harness, scope, src_root = args
+    it = find_item(load(os.environ["CATALOG_JSON"]), "suites", suite)
+    man = it.get("manifest") if it else None
+    if man is None:
+        sys.exit(1)
+    lines = []
+    def err(msg):
+        print("ERR\tsuite '%s' manifest: %s" % (suite, msg))
+        sys.exit(0)
+    if not isinstance(man, dict) or not isinstance(man.get(harness, []), list):
+        err("must map each harness to a list of placements")
+    if harness not in man:
+        print("OMIT")
+        sys.exit(0)
+    kinds = (load(os.environ["HARNESSES_JSON"]).get(harness, {}).get("resourceKinds") or {}).get(scope) or {}
+    base = os.path.realpath(os.path.join(src_root, it["path"]))
+    def tree(root):  # [(path relative to root or "", abs path)] of a file or directory tree
+        if os.path.isfile(root) and not os.path.islink(root):
+            return [("", root)]
+        found = []
+        for d, ds, fs in os.walk(root):
+            for n in ds + fs:
+                if os.path.islink(os.path.join(d, n)):
+                    err("symlink in placement: " + os.path.join(d, n))
+            found += [(os.path.relpath(os.path.join(d, n), root).replace(os.sep, "/"), os.path.join(d, n)) for n in sorted(fs)]
+        return found
+    for p in man[harness]:
+        if not (isinstance(p, dict) and all(isinstance(p.get(k), str) for k in ("kind", "src", "mode"))):
+            err("each placement needs string kind, src and mode")
+        kind, src, pmode = p["kind"], p["src"], p["mode"]
+        if kind not in ("agents", "skills", "instructions", "hooks", "config") or pmode not in ("copy", "merge"):
+            err("bad kind or mode in placement '%s'" % src)
+        if src.startswith("/") or "\\" in src or any(s in ("", ".", "..") for s in src.split("/")):
+            err("src must be relative with no empty, '.' or '..' segments: '%s'" % src)
+        full = os.path.realpath(os.path.join(base, src))
+        if not full.startswith(base + os.sep) or not os.path.exists(full):
+            err("src '%s' is missing or outside the suite" % src)
+        tmpl = kinds.get(kind)
+        if tmpl is None:
+            lines.append("NOTE\tkind '%s' has no destination for %s/%s — skipped" % (kind, harness, scope))
+            continue
+        tmpl = tmpl.replace("{suite}", suite)
+        if kind == "instructions":
+            roots = [(tmpl, full)]
+        elif kind == "config":
+            roots = [(tmpl.replace("{relpath}", os.path.basename(full)), full)]
+        elif os.path.isdir(full):
+            roots = [(tmpl.replace("{basename}", n), os.path.join(full, n)) for n in sorted(os.listdir(full))]
+        else:
+            err("kind '%s' needs a directory src: '%s'" % (kind, src))
+        for droot, sroot in roots:
+            for rel, a in tree(sroot):
+                dest = droot + ("/" + rel if rel else "")
+                bare = os.path.normpath(dest[2:] if dest.startswith("~/") else dest)
+                if dest.startswith("/") or bare in (".", "..") or bare.startswith("../") or "\t" in dest or "\n" in dest:
+                    err("unsafe destination '%s'" % dest)
+                lines.append("ROW\t%s\t%s\t%s" % (it["path"] + "/" + os.path.relpath(a, base).replace(os.sep, "/"), dest, pmode))
+    print("\n".join(lines))
+
 elif mode == "record":
     import datetime, hashlib
     path, harness, scope, repo, ref, tsv, cwd, home = args
@@ -372,12 +435,28 @@ _read_loop_pick() {
 #             transform is the post-copy rewrite, or "-" for none.
 # Returns 1, after printing a note, if the asset can't be placed for this harness.
 plan_item() {
-  local asset="$1" label="$2" out="$3" category name template transform="-"
+  local asset="$1" label="$2" out="$3" category name template transform="-" placements
   case "$asset" in
     skills/*|suites/*) category="${asset%%/*}" ;;
     *) _warn "$label has an unrecognized category — skipped"; return 1 ;;
   esac
   name="${asset##*/}"
+  # A suite manifest.json (ADR-0008) replaces mapping.suites and any translate: one
+  # row per placed file, or a skip when the manifest omits this harness.
+  if [[ "$category" == suites ]] && placements=$(_json placements "$name" "$HARNESS" "$SCOPE" "$SRC"); then
+    local kind rel dest pmode msg rows="$WORK/placement_rows.tsv"
+    : > "$rows"
+    while IFS=$'\t' read -r kind rel dest pmode; do
+      case "$kind" in
+        ERR)  _fail "$rel"; exit 1 ;;
+        OMIT) _warn "$label: manifest has no placements for harness '$HARNESS' — skipped"; return 1 ;;
+        NOTE) _warn "$label: $rel" ;;
+        ROW)  printf '%s\t%s\t%s\t%s\t-\n' "$asset" "$rel" "$dest" "$pmode" >> "$rows" ;;
+      esac
+    done <<< "$placements"
+    cat "$rows" >> "$out"
+    return 0
+  fi
   if ! template=$(_json mapping "$HARNESS" "$category"); then
     _warn "$label has no mapping for harness '$HARNESS' — skipped"
     return 1
@@ -533,7 +612,7 @@ resolve_dependencies() {
         grep -qxF "$dep" "$skipped_file" && continue
         grep -qxF "$dep" "$candidates_file" && continue
         printf '%s\n' "$dep" >> "$candidates_file"
-      done < <(_json deps "$src_rel")
+      done < <(_json deps "$asset")
     done < "$SELECTION_FILE"
     [[ -s "$candidates_file" ]] || break
 
@@ -629,10 +708,31 @@ apply_selection() {
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
       [[ "$transform" != "-" ]] && note="  (translated: $transform)"
+      [[ "$mode" == merge ]] && note="  (merge mode not yet supported, would skip)"
       if [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
         printf '  [dry-run] %-9s %s -> %s%s\n' "$category" "$src_rel" "$dest" "$note"
+      fi
+      continue
+    fi
+
+    # Manifest placements (ADR-0008) work per file and never remove a directory:
+    # the destination may be the user's own tree (e.g. ./scripts), not ours alone.
+    if [[ "$mode" == merge ]]; then
+      _warn "merge mode not yet supported, skipped: $dest"
+      continue
+    fi
+    if [[ "$mode" == copy ]]; then
+      if [[ -d "$dest" || -L "$dest" ]]; then
+        _warn "skip (not a regular file): $dest"
+      elif [[ -e "$dest" && $FORCE -ne 1 ]]; then
+        _warn "skip (exists): $dest — use --force to overwrite"
+      else
+        mkdir -p "$(dirname "$dest")"
+        cp "$src" "$dest"
+        record_write "$asset" "$dest_spec"
+        _ok "${dest_spec#"$SCOPE_ROOT"/}"
       fi
       continue
     fi
