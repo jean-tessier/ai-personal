@@ -458,6 +458,20 @@ test_manifest_lint_rejects_bad_manifest() {
   assert_contains "flags the typo'd category" "$out" "unknown category 'suite'"
 }
 
+test_translate_lint_rejects_bad_key() {
+  _head "validate.sh rejects a bad translate key (ADR-0011 lint)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src"
+  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["copilot"]["translate"]={"suites":"bogus-transform","prompts":"copilot-plugin"}; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "bad translate: exits 1" 1 "$code"
+  assert_contains "flags the unknown transform" "$out" "unknown transform 'bogus-transform'"
+  assert_contains "flags a category not in mapping" "$out" "category 'prompts' not in mapping"
+}
+
 test_fetch_curl_failure_exits_1() {
   _head "failed curl fetch exits 1 with a message (not curl's own code)"
   local sb out code
@@ -560,6 +574,7 @@ test_copilot_skips_non_plugin_shaped_suite
 test_copilot_dep_on_non_plugin_shaped_suite_skipped
 test_fetch_via_stubbed_curl
 test_manifest_lint_rejects_bad_manifest
+test_translate_lint_rejects_bad_key
 test_fetch_curl_failure_exits_1
 test_fetch_bad_tarball_exits_1
 test_ref_pins_fetched_tree
