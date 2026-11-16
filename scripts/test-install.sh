@@ -1079,7 +1079,7 @@ test_manifest_tab_in_src_cannot_shift_columns
 test_manifest_refuses_dest_text_rule() {
   _head "dest text rule matches the record consumer: ~/ only for user scope, no '..' segment anywhere"
   local sb src out code tmpl
-  for tmpl in '~/.bashrc.d/{basename}' '.claude/../x/{basename}'; do
+  for tmpl in '~/.bashrc.d/{basename}' '.claude/../x/{basename}' '~backup/{basename}'; do
     sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"
     python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["claude-code"]["resourceKinds"]["project"]["agents"]=sys.argv[2]; json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json" "$tmpl"
     out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
@@ -1134,6 +1134,44 @@ test_manifest_parent_is_file_skips_not_aborts() {
   assert_exists "other placements still land" "$d/.claude-plugin/plugin.json"
 }
 test_manifest_parent_is_file_skips_not_aborts
+
+test_manifest_unwritable_parent_fails_closed() {
+  _head "an unwritable destination parent fails the install; it is not reported as 'parent is not a directory'"
+  local sb src out code rec
+  if [[ "$(id -u)" == 0 ]]; then _skip "running as root: chmod can't block mkdir"; return; fi
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" "$FX_CC")"; rec="$sb/cwd/.claude/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/.claude/suites"; chmod 555 "$sb/cwd/.claude/suites"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  chmod -R u+w "$sb/cwd/.claude"
+  assert_exit "exits 1" 1 "$code"
+  assert_not_contains "not mislabelled as a non-directory parent" "$out" "parent is not a directory"
+  assert_missing "nothing placed" "$sb/cwd/.claude/suites/fx"
+  assert_missing "nothing recorded" "$rec"
+}
+test_manifest_unwritable_parent_fails_closed
+
+test_manifest_dry_run_merge_row_over_existing_file() {
+  _head "a dry-run merge row over an existing file says merge is unsupported, not 'use --force'"
+  local sb src out
+  sb="$(new_sandbox)"
+  src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"}]}')"
+  mkdir -p "$sb/cwd/.github"; printf 'MINE\n' > "$sb/cwd/.github/copilot-instructions.md"
+  out="$(fx_install "$sb" "$src" --harness copilot --dry-run)"
+  assert_contains "says merge is not supported" "$out" "merge mode not yet supported"
+  assert_not_contains "does not promise --force" "$out" "use --force"
+}
+test_manifest_dry_run_merge_row_over_existing_file
+
+test_manifest_empty_placement_list_is_a_skip() {
+  _head "a manifest that keys the harness with no placements is noted, not silently dropped"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(manifest_fixture "$sb" '{"claude-code":[]}')"
+  out="$(fx_install "$sb" "$src" --harness claude-code)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "notes the skip" "$out" "manifest has no placements for harness 'claude-code' — skipped"
+  assert_missing "nothing placed" "$sb/cwd/.claude/suites/fx"
+}
+test_manifest_empty_placement_list_is_a_skip
 
 test_manifest_instructions_needs_file_src() {
   _head "an instructions placement with a directory src is refused"

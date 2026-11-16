@@ -210,7 +210,7 @@ elif mode == "placements":
         if kind not in ("agents", "skills", "instructions", "hooks", "config") or pmode not in ("copy", "merge"):
             err("bad kind or mode in placement '%s'" % src)
         if src.startswith("/") or "\\" in src or ctl(src) or any(s in ("", ".", "..") for s in src.split("/")):
-            err("src must be relative with no empty, '.' or '..' segments: '%s'" % src)
+            err("src must be relative with no empty, '.' or '..' segments or control characters: '%s'" % src)
         full = os.path.realpath(os.path.join(base, src))
         if not full.startswith(base + os.sep) or not os.path.exists(full):
             err("src '%s' is missing or outside the suite" % src)
@@ -235,10 +235,12 @@ elif mode == "placements":
                 srel = it["path"] + "/" + os.path.relpath(a, base).replace(os.sep, "/")
                 # same text rule as ADR-0012's record consumer: root-anchored, ~/ only for a home-anchored scope
                 segs = (dest[2:] if dest.startswith("~/") else dest).split("/")
-                if (dest.startswith("/") or "\\" in dest or ctl(dest) or ctl(srel) or dest.startswith("~/") != home_anchored
+                if (dest.startswith("/") or "\\" in dest or ctl(dest) or ctl(srel) or (not dest.startswith("~/") if home_anchored else dest.startswith("~"))
                         or any(g in ("", ".", "..") for g in segs)):
                     err("unsafe destination '%s'" % dest)
                 lines.append("ROW\t%s\t%s\t%s" % (srel, dest, pmode))
+    if not any(l.startswith("ROW\t") for l in lines):
+        lines.append("OMIT")
     print("\n".join(lines))
 
 elif mode == "record":
@@ -442,13 +444,16 @@ _read_loop_pick() {
 # resolve_dependencies() (dependencies) call it, so they can't drift apart.
 #
 # plan_item <asset> <label> <out_file>
-#   asset     repo-relative path, e.g. skills/atomic-commits (also the src_rel)
+#   asset     repo-relative path, e.g. skills/atomic-commits (the src_rel of a mapping row)
 #   label     how to name the asset in a skip note, e.g. "dependency 'skills/x'"
 #   out_file  gets one row appended:
 #             asset<TAB>src_rel<TAB>dest<TAB>mode<TAB>transform
-#             dest is root-anchored in resolve_root()'s convention (relative =
-#             $PWD, "~/" = $HOME); mode is "item" (whole-directory skip-or-replace);
-#             transform is the post-copy rewrite, or "-" for none.
+#             src_rel equals asset for a mapping row, and is one suite file for a
+#             manifest row (one row per placed file). dest is root-anchored in
+#             resolve_root()'s convention (relative = $PWD, "~/" = $HOME); mode is
+#             "item" (whole-directory skip-or-replace) or "copy"|"merge" (per-file
+#             manifest placement, never removes a directory); transform is the
+#             post-copy rewrite, or "-" for none.
 # Returns 1, after printing a note, if the asset can't be placed for this harness.
 plan_item() {
   local asset="$1" label="$2" out="$3" category name template transform="-" placements
@@ -732,8 +737,9 @@ apply_selection() {
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
       [[ "$transform" != "-" ]] && note="  (translated: $transform)"
-      [[ "$mode" == merge ]] && note="  (merge mode not yet supported, would skip)"
-      if [[ "$mode" == copy && ( -d "$dest" || -L "$dest" ) ]]; then
+      if [[ "$mode" == merge ]]; then
+        printf '  [dry-run] %-9s %s -> %s  (merge mode not yet supported, would skip)\n' "$category" "$src_rel" "$dest"
+      elif [[ "$mode" == copy && ( -d "$dest" || -L "$dest" ) ]]; then
         printf '  [dry-run] %-9s %s -> %s  (not a regular file, would skip)\n' "$category" "$src_rel" "$dest"
       elif [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
@@ -755,10 +761,15 @@ apply_selection() {
       elif [[ -e "$dest" && $FORCE -ne 1 ]]; then
         _warn "skip (exists): $dest — use --force to overwrite"
       else
-        if ! mkdir -p "$(dirname "$dest")" 2>/dev/null; then
+        # skip only when something that is not a directory is in the way; any other
+        # mkdir failure (permissions, read-only, full disk) must fail the install
+        local up; up="$(dirname "$dest")"
+        while [[ ! -e "$up" && ! -L "$up" ]]; do up="$(dirname "$up")"; done
+        if [[ ! -d "$up" ]]; then
           _warn "skip (parent is not a directory): $dest"
           continue
         fi
+        mkdir -p "$(dirname "$dest")"
         cp "$src" "$dest"
         record_write "$asset" "$dest_spec"
         _ok "${dest_spec#"$SCOPE_ROOT"/}"
