@@ -83,7 +83,7 @@ The record is a user-editable file, so a consumer that deletes files treats it a
 
 - Re-run install's record validation, through one shared loader, before deleting anything.
 - Check every path by text: reject absolute, empty, `.`/`..` segments and backslashes; project-scope paths must not start with `~`; user-scope paths MUST start with `~/`.
-- Don't restrict paths to the scope root (Copilot `config` and Makefile-style placements sit at the project root), but require each path's real parent to stay inside `$PWD` (project) or `$HOME` (user).
+- Don't restrict project-scope paths to the scope root (Copilot `config` and Makefile-style placements sit at the project root), but require each path's real parent to stay inside `$PWD` (project) or `$HOME` (user). User-scope paths are also confined to the scope root (for example `~/.claude/`), where every user-scope placement sits, so a shared record can't name `~/.zshrc` (narrowed by the IM2 review, 2026-11-16).
 - `lstat` before touching: never delete the record file or the scope root, delete only regular files or symlinks (`unlink` never follows), and skip directories.
 - Never delete a path that is also claimed by an asset that is not being uninstalled.
 - If any recorded hash mismatches, keep the whole asset; `--force` lists every mismatched path before deleting.
@@ -92,7 +92,8 @@ The record is a user-editable file, so a consumer that deletes files treats it a
 
 Note (2026-11-16, IM2 review): uninstall reads only `<scope root>/.ai-personal-install.json`,
 resolved from `harnesses.json` after the same fetch as an install, and only if its real parent is
-inside `$PWD` or `$HOME`. It also refuses a path with a `.git` segment or a control character.
+inside `$PWD` or `$HOME`. It also refuses a path with a `.git` segment (by text, or after resolving
+symlinks) or an unprintable character.
 Beyond these checks it trusts the record you hold, so run `--dry-run` first.
 
 ## Consequences
