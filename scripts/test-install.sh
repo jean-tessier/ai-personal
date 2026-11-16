@@ -437,6 +437,27 @@ test_fetch_via_stubbed_curl() {
   assert_exists "skill from the extracted tarball installed" "$sb/cwd/.claude/skills/demo/SKILL.md"
 }
 
+test_manifest_lint_rejects_bad_manifest() {
+  _head "validate.sh rejects a bad suite manifest and a typo'd mapping key (ADR-0008 lint)"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src"
+  cp -R "$REPO/scripts" "$REPO/skills" "$REPO/suites" "$REPO/.claude-plugin" "$src/"
+  printf '%s' '{"bogus":[],"claude-code":[{"kind":"agents","src":"../x","mode":"copy"},{"kind":["agents"],"src":"claude-code/agents","mode":"copy"}]}' \
+    > "$src/suites/tier-layered-teams/manifest.json"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "bad manifest: exits 1" 1 "$code"
+  assert_contains "flags unknown harness key" "$out" "unknown harness key 'bogus'"
+  assert_contains "flags non-relative src" "$out" "src must be relative"
+  assert_contains "a lint crash is a FAIL, not a silent ok" "$out" "check crashed"
+  rm "$src/suites/tier-layered-teams/manifest.json"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); m=d["copilot"]["mapping"]; m["suite"]=m.pop("suites"); json.dump(d,open(p,"w"))' "$src/scripts/harnesses.json"
+  out="$(bash "$src/scripts/validate.sh" </dev/null 2>&1)"; code=$?
+  assert_exit "typo'd mapping key: exits 1" 1 "$code"
+  assert_contains "flags the typo'd category" "$out" "unknown category 'suite'"
+}
+
 test_dry_run_writes_nothing
 test_install_project_scope
 test_install_user_scope
@@ -461,6 +482,7 @@ test_copilot_suite_translation
 test_copilot_skips_non_plugin_shaped_suite
 test_copilot_dep_on_non_plugin_shaped_suite_skipped
 test_fetch_via_stubbed_curl
+test_manifest_lint_rejects_bad_manifest
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
