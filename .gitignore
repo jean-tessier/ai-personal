@@ -20,3 +20,6 @@ node_modules/
 
 .tmp
 evals/*/work/
+
+# This repo's own dogfood install drops an install record here
+/.claude/.ai-personal-install.json

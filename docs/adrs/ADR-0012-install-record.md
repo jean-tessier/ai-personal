@@ -16,8 +16,8 @@ Accepted
 `install.sh` copies assets into a harness's scope root and keeps no memory of it. Nothing can later
 say which files an install placed, so an uninstall would have to guess, and could delete a file the
 user edited or one that was never ours. Deferred item #6 asked for an installed-assets record for
-that reason. The owner chose a record plus `--uninstall` and rejected `--update` (see
-`docs/design/installer-completion.md`, Decisions).
+that reason. The owner chose a record plus `--uninstall` and rejected `--update` (owner
+decision Q4, 2026-11-15).
 
 ## Decision
 
@@ -34,6 +34,7 @@ example `.claude/.ai-personal-install.json`, `~/.claude/.ai-personal-install.jso
   "assets": {
     "skills/atomic-commits": {
       "installedAt": "2026-11-15T18:00:00Z",
+      "ref": "main",
       "files": { ".claude/skills/atomic-commits/SKILL.md": "sha256:9f2c..." }
     }
   }
@@ -47,15 +48,25 @@ example `.claude/.ai-personal-install.json`, `~/.claude/.ai-personal-install.jso
 - **Hashes are taken after any transform**, so they describe what is on disk. A later uninstall can
   tell an untouched file from an edited one.
 - **Every write path calls `record_write asset dest`**: plain copies, Copilot-translated copies and
-  dependency copies all go through `apply_selection()`. After the loop, `_json record` expands
-  directories, hashes the files with python `hashlib` (python3 is already required, so there is no
-  `shasum` vs `sha256sum` split) and merges them in. Per asset, `files` entries are replaced or
-  added and `installedAt` is refreshed; other assets and paths are kept.
+  dependency copies all go through `apply_selection()`. `record_write` flushes at once, right after
+  the placement, so a failure part-way through an install never leaves placed files unrecorded.
+  `_json record` expands directories, hashes the files with python `hashlib` (python3 is already
+  required, so there is no `shasum` vs `sha256sum` split) and merges them in. Per asset, the entries
+  under the placed destination are replaced (keys the new version no longer ships are dropped) and
+  `installedAt` is refreshed; other assets and paths are kept. The record is written to a temp file
+  and renamed into place.
 - **Only what was written is recorded.** A destination skipped because it exists is not logged, so
   a user's own skill with the same name is never claimed. `--dry-run` writes no record.
-- **`source.ref` is the `--ref` value** (default `main`), and `null` under `--local`.
-- **`version` is the only forward-compatibility hook.** The writer refuses a record with an unknown
-  version rather than overwrite it.
+- **`source.ref` is the `--ref` value** (default `main`), and `null` under `--local`. It describes
+  the *last* install; each asset entry also keeps the `ref` it came from, so mixed-ref installs stay
+  traceable.
+- **`version` is the only forward-compatibility hook.** The installer validates an existing record
+  before any file is copied, and exits 1 with a clean message, leaving the record untouched, when it
+  is corrupt, has an unknown version or a malformed shape, or belongs to a different harness or scope
+  (`--scope project` run from `$HOME` resolves to the same file as `--scope user`).
+- **Symlinks inside `skills/` and `suites/` are rejected by `scripts/validate.sh`**, because a
+  copied symlink would be recorded by its target or dangle.
+- This repo's own dogfood install writes `.claude/.ai-personal-install.json`; it is gitignored.
 
 Alternatives considered:
 
