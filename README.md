@@ -84,10 +84,11 @@ and shrinks the record, deleting it once it is empty. With no record it says so 
 asset with any file you changed is kept whole and named; `--force` lists those files and then
 deletes them too. Files you added yourself are never touched. `--assets` limits it to some
 categories, and `--dry-run` only lists what it would do. A record with an unsafe path (absolute,
-`..`, a `.git` segment, an unprintable character, outside the project root, or for a record in
-`$HOME` outside its scope root, also through a symlinked directory such as a `~/.claude/skills`
-linked to a dotfiles repo) stops it before anything is deleted. Beyond that, uninstall trusts the
-record you hold, so run `--dry-run` first.
+`..`, a `.git` segment, an unprintable character, outside the project root, or, for user scope or
+a project-scope record whose project directory is `$HOME` or contains it, outside its scope root,
+also through a symlinked directory such as a `~/.claude/skills` linked to a dotfiles repo) stops it
+before anything is deleted. Beyond that, uninstall trusts the record you hold, so run `--dry-run`
+first.
 It can't be combined with `--yes-deps` or `--no-deps`.
 
 Any asset can declare dependencies on other assets in a colocated `dependencies.json` (a flat
