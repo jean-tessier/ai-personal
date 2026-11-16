@@ -593,6 +593,26 @@ test_dep_skip_note_printed_once() {
 }
 test_dep_skip_note_printed_once
 
+# A scope root of "" must anchor at $PWD like any other relative root, never at "/".
+test_empty_scope_root_anchors_at_pwd() {
+  _head "an empty scope root anchors at the project root, not /"
+  local sb src out code
+  sb="$(new_sandbox)"
+  src="$sb/fake_src"
+  mkdir -p "$src/scripts" "$src/skills/s1"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/catalog.sh"
+  printf '{"h":{"label":"H","scopes":{"project":""},"mapping":{"skills":"skills/{name}"}}}' \
+    > "$src/scripts/harnesses.json"
+  printf -- '---\nname: s1\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+
+  out="$( ( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+      bash "$INSTALL" --local "$src" --harness h --scope project --assets skills --dry-run ) 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_contains "destination is under the project root" "$out" "$sb/cwd/skills/s1"
+  assert_not_contains "destination is not rooted at /" "$out" " -> /skills/"
+}
+test_empty_scope_root_anchors_at_pwd
+
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
   printf "${GRN}${BLD}%d passed, %d skipped.${NC}\n\n" "$PASS" "$SKIP"

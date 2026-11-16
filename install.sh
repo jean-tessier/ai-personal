@@ -75,6 +75,7 @@ trap 'rm -rf "$WORK"' EXIT
 CATALOG_JSON="$WORK/catalog.json"
 SELECTION_FILE="$WORK/selection.tsv"
 SRC=""
+SCOPE_ROOT=""   # set by validate_harness_and_scope()
 HARNESSES_JSON=""
 CATEGORIES=()
 
@@ -228,6 +229,7 @@ validate_harness_and_scope() {
     _fail "harness '$HARNESS' has no scope '$SCOPE' (available: $(_json scope_keys "$HARNESS"))"
     exit 1
   fi
+  SCOPE_ROOT="$(_json scope_root "$HARNESS" "$SCOPE")"
 }
 
 resolve_categories() {
@@ -320,7 +322,7 @@ _read_loop_pick() {
 #             transform is the post-copy rewrite, or "-" for none.
 # Returns 1, after printing a note, if the asset can't be placed for this harness.
 plan_item() {
-  local asset="$1" label="$2" out="$3" category name template root transform="-"
+  local asset="$1" label="$2" out="$3" category name template transform="-"
   case "$asset" in
     skills/*|suites/*) category="${asset%%/*}" ;;
     *) _warn "$label has an unrecognized category — skipped"; return 1 ;;
@@ -342,8 +344,7 @@ plan_item() {
     fi
     transform=copilot-plugin
   fi
-  root="$(_json scope_root "$HARNESS" "$SCOPE")"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$asset" "$asset" "$root/${template//"{name}"/$name}" item "$transform" >> "$out"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$asset" "$asset" "${SCOPE_ROOT:+$SCOPE_ROOT/}${template//"{name}"/$name}" item "$transform" >> "$out"
 }
 
 # ── Selection step ──────────────────────────────────────────────────────────
@@ -455,7 +456,7 @@ resolve_dependencies() {
     while IFS=$'\t' read -r asset src_rel dest mode transform; do
       while IFS= read -r dep; do
         [[ -z "$dep" ]] && continue
-        cut -f1 "$SELECTION_FILE" | grep -qxF "$dep" && continue
+        grep -qxF -- "$dep" <(cut -f1 "$SELECTION_FILE") && continue
         grep -qxF "$dep" "$skipped_file" && continue
         grep -qxF "$dep" "$candidates_file" && continue
         printf '%s\n' "$dep" >> "$candidates_file"
@@ -522,9 +523,6 @@ apply_selection() {
     return
   fi
 
-  local root
-  root="$(_json scope_root "$HARNESS" "$SCOPE")"
-
   _head "$([[ $DRY_RUN -eq 1 ]] && echo "dry run" || echo "installing")"
   local asset src_rel dest_spec mode transform category src dest
   while IFS=$'\t' read -r asset src_rel dest_spec mode transform; do
@@ -555,7 +553,7 @@ apply_selection() {
     if [[ "$transform" == "copilot-plugin" ]]; then
       translate_to_copilot "$dest"
     fi
-    _ok "${dest_spec#"$root"/}"
+    _ok "${dest_spec#"$SCOPE_ROOT"/}"
   done < "$SELECTION_FILE"
 }
 
