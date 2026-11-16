@@ -717,6 +717,7 @@ record_write() {
 }
 
 # ── Copy (or report, in --dry-run) ──────────────────────────────────────────
+MERGE_KEPT=""   # existing files a merge placement left alone (listed once at the end)
 apply_selection() {
   if [[ ! -s "$SELECTION_FILE" ]]; then
     _warn "nothing selected — no files copied"
@@ -737,10 +738,10 @@ apply_selection() {
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
       [[ "$transform" != "-" ]] && note="  (translated: $transform)"
-      if [[ "$mode" == merge ]]; then
-        printf '  [dry-run] %-9s %s -> %s  (merge mode not yet supported, would skip)\n' "$category" "$src_rel" "$dest"
-      elif [[ "$mode" == copy && ( -d "$dest" || -L "$dest" ) ]]; then
+      if [[ "$mode" != item && ( -d "$dest" || -L "$dest" ) ]]; then
         printf '  [dry-run] %-9s %s -> %s  (not a regular file, would skip)\n' "$category" "$src_rel" "$dest"
+      elif [[ -e "$dest" && "$mode" == merge && $FORCE -ne 1 ]]; then
+        printf '  [dry-run] %-9s %s -> %s  (exists, merge would leave it untouched)\n' "$category" "$src_rel" "$dest"
       elif [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
@@ -751,15 +752,17 @@ apply_selection() {
 
     # Manifest placements (ADR-0008) work per file and never remove a directory:
     # the destination may be the user's own tree (e.g. ./scripts), not ours alone.
-    if [[ "$mode" == merge ]]; then
-      _warn "merge mode not yet supported, skipped: $dest"
-      continue
-    fi
-    if [[ "$mode" == copy ]]; then
+    # merge is copy that never touches an existing file without --force (ADR-0013);
+    # its skips are reported once at the end, not per file.
+    if [[ "$mode" == copy || "$mode" == merge ]]; then
       if [[ -d "$dest" || -L "$dest" ]]; then
         _warn "skip (not a regular file): $dest"
       elif [[ -e "$dest" && $FORCE -ne 1 ]]; then
-        _warn "skip (exists): $dest — use --force to overwrite"
+        if [[ "$mode" == merge ]]; then
+          MERGE_KEPT="$MERGE_KEPT $dest"
+        else
+          _warn "skip (exists): $dest — use --force to overwrite"
+        fi
       else
         # skip only when something that is not a directory is in the way; any other
         # mkdir failure (permissions, read-only, full disk) must fail the install
@@ -792,6 +795,7 @@ apply_selection() {
     record_write "$asset" "$dest_spec"
     _ok "${dest_spec#"$SCOPE_ROOT"/}"
   done < "$SELECTION_FILE"
+  [[ -z "$MERGE_KEPT" ]] || _warn "merge: left existing file(s) untouched (use --force to overwrite):$MERGE_KEPT"
 }
 
 main() {

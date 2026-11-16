@@ -977,19 +977,19 @@ test_manifest_harness_omitted_warns_and_skips() {
 }
 test_manifest_harness_omitted_warns_and_skips
 
-test_manifest_merge_rows_noted_and_skipped() {
-  _head "merge placements are noted and skipped; copy placements at the project root still land"
+test_manifest_merge_rows_create_missing_files() {
+  _head "merge placements create their missing files; copy placements at the project root still land"
   local sb src out
   sb="$(new_sandbox)"
   src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"hooks","src":"copilot/.github/hooks","mode":"copy"},{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"},{"kind":"config","src":"copilot/Makefile","mode":"copy"},{"kind":"config","src":"copilot/scripts","mode":"merge"}]}')"
   out="$(fx_install "$sb" "$src" --harness copilot)"
   assert_exists "hook placed" "$sb/cwd/.github/hooks/h.json"
   assert_exists "config relpath lands at the project root" "$sb/cwd/Makefile"
-  assert_missing "merge instructions not placed" "$sb/cwd/.github/copilot-instructions.md"
-  assert_missing "merge config not placed" "$sb/cwd/scripts/run.sh"
-  assert_contains "merge skip is noted" "$out" "merge mode not yet supported"
+  assert_exists "merge instructions created" "$sb/cwd/.github/copilot-instructions.md"
+  assert_exists "merge config created" "$sb/cwd/scripts/run.sh"
+  assert_not_contains "no merge-unsupported note" "$out" "not yet supported"
 }
-test_manifest_merge_rows_noted_and_skipped
+test_manifest_merge_rows_create_missing_files
 
 test_manifest_refuses_unsafe_src() {
   _head "a manifest src that is absolute, has ./.. segments or escapes the suite is refused"
@@ -1178,13 +1178,13 @@ test_manifest_unwritable_parent_fails_closed() {
 test_manifest_unwritable_parent_fails_closed
 
 test_manifest_dry_run_merge_row_over_existing_file() {
-  _head "a dry-run merge row over an existing file says merge is unsupported, not 'use --force'"
+  _head "a dry-run merge row over an existing file says merge leaves it untouched, not 'use --force'"
   local sb src out
   sb="$(new_sandbox)"
   src="$(manifest_fixture "$sb" '{"copilot":[{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"}]}')"
   mkdir -p "$sb/cwd/.github"; printf 'MINE\n' > "$sb/cwd/.github/copilot-instructions.md"
   out="$(fx_install "$sb" "$src" --harness copilot --dry-run)"
-  assert_contains "says merge is not supported" "$out" "merge mode not yet supported"
+  assert_contains "says merge leaves it untouched" "$out" "merge would leave it untouched"
   assert_not_contains "does not promise --force" "$out" "use --force"
 }
 test_manifest_dry_run_merge_row_over_existing_file
@@ -1222,6 +1222,97 @@ test_manifest_dependency_messages_once_per_asset() {
   assert_not_contains "suite listed once, not once per file" "$out" "suites/fx suites/fx"
 }
 test_manifest_dependency_messages_once_per_asset
+
+# merge placements (ADR-0013): create missing files, never touch an existing one without --force.
+MG_M='{"copilot":[{"kind":"instructions","src":"copilot/.github/copilot-instructions.md","mode":"merge"},{"kind":"config","src":"copilot/scripts","mode":"merge"}]}'
+mg_fixture() { # <sandbox>: merge fixture with two extra scripts
+  local src; src="$(manifest_fixture "$1" "$MG_M")"
+  printf 'one\n' > "$src/suites/fx/copilot/scripts/one.sh"; printf 'two\n' > "$src/suites/fx/copilot/scripts/two.sh"
+  printf '%s' "$src"
+}
+
+test_merge_creates_missing_files_in_fresh_project() {
+  _head "merge into a fresh project creates the files and their parents"
+  local sb src out code
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  out="$(fx_install "$sb" "$src" --harness copilot)"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_exists "instructions created with parent" "$sb/cwd/.github/copilot-instructions.md"
+  assert_exists "script created with parent" "$sb/cwd/scripts/one.sh"
+  assert_not_contains "no skip summary when nothing was skipped" "$out" "left existing"
+}
+test_merge_creates_missing_files_in_fresh_project
+
+test_merge_leaves_existing_files_and_lists_them_once() {
+  _head "merge leaves existing files untouched and lists them once at the end"
+  local sb src out n
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  mkdir -p "$sb/cwd/scripts" "$sb/cwd/.github"
+  printf 'MINE1\n' > "$sb/cwd/scripts/one.sh"; printf 'MINE2\n' > "$sb/cwd/scripts/two.sh"
+  printf 'MINE3\n' > "$sb/cwd/.github/copilot-instructions.md"
+  out="$(fx_install "$sb" "$src" --harness copilot)"
+  assert_contains "one.sh untouched" "$(cat "$sb/cwd/scripts/one.sh")" "MINE1"
+  assert_contains "instructions untouched" "$(cat "$sb/cwd/.github/copilot-instructions.md")" "MINE3"
+  assert_exists "the missing file is still created" "$sb/cwd/scripts/run.sh"
+  assert_contains "summary names a skipped file" "$out" "scripts/two.sh"
+  n="$(printf '%s\n' "$out" | grep -c "left existing")"
+  [[ "$n" == 1 ]] && _ok "summary line appears exactly once" || _fail "summary line count: $n"
+}
+test_merge_leaves_existing_files_and_lists_them_once
+
+test_merge_force_overwrites_per_file_only() {
+  _head "merge --force overwrites that file per file; a user's extra file survives"
+  local sb src out
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  mkdir -p "$sb/cwd/scripts"; printf 'MINE\n' > "$sb/cwd/scripts/one.sh"; printf 'EXTRA\n' > "$sb/cwd/scripts/user.sh"
+  out="$(fx_install "$sb" "$src" --harness copilot --force)"
+  assert_contains "existing file overwritten" "$(cat "$sb/cwd/scripts/one.sh")" "one"
+  assert_not_contains "overwritten, so no skip summary" "$out" "left existing"
+  assert_contains "user's extra file survives" "$(cat "$sb/cwd/scripts/user.sh")" "EXTRA"
+}
+test_merge_force_overwrites_per_file_only
+
+test_merge_record_has_created_not_skipped() {
+  _head "created merge files are recorded with matching sha256; skipped ones are not"
+  local sb src rec files
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"; rec="$sb/cwd/.github/.ai-personal-install.json"
+  mkdir -p "$sb/cwd/scripts"; printf 'MINE\n' > "$sb/cwd/scripts/one.sh"
+  fx_install "$sb" "$src" --harness copilot >/dev/null
+  assert_record "record hashes match, 3 files (4 placed minus 1 skipped)" "$rec" "$sb/cwd" "$sb/home" 0 3
+  files="$(record_json "$rec" 'sorted(d["assets"]["suites/fx"]["files"])')"
+  assert_not_contains "skipped file not recorded" "$files" "one.sh"
+  assert_contains "created file recorded" "$files" "two.sh"
+}
+test_merge_record_has_created_not_skipped
+
+test_merge_dir_or_symlink_dest_skipped() {
+  _head "a merge destination that is a directory or symlink is skipped"
+  local sb src out
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  mkdir -p "$sb/cwd/scripts/one.sh" "$sb/outside"; printf 'KEEP\n' > "$sb/outside/t"
+  ln -s "$sb/outside/t" "$sb/cwd/scripts/two.sh"
+  out="$(fx_install "$sb" "$src" --harness copilot --force)"
+  assert_contains "notes not a regular file" "$out" "not a regular file"
+  assert_exists "directory dest left in place" "$sb/cwd/scripts/one.sh"
+  assert_contains "symlink target untouched" "$(cat "$sb/outside/t")" "KEEP"
+  assert_exists "other files still created" "$sb/cwd/scripts/run.sh"
+}
+test_merge_dir_or_symlink_dest_skipped
+
+test_merge_dry_run_lists_create_vs_skip() {
+  _head "merge --dry-run lists create vs skip and writes nothing"
+  local sb src out
+  sb="$(new_sandbox)"; src="$(mg_fixture "$sb")"
+  mkdir -p "$sb/cwd/scripts"; printf 'MINE\n' > "$sb/cwd/scripts/one.sh"
+  out="$(fx_install "$sb" "$src" --harness copilot --dry-run)"
+  assert_contains "skip listed" "$out" "scripts/one.sh  (exists, merge would leave it untouched)"
+  assert_contains "create listed" "$out" "scripts/two.sh"
+  assert_not_contains "no skip note on the create line" "$(printf '%s\n' "$out" | grep 'two.sh')" "exists"
+  assert_missing "nothing written" "$sb/cwd/scripts/two.sh"
+  assert_missing "no record written" "$sb/cwd/.github/.ai-personal-install.json"
+  assert_contains "existing file untouched" "$(cat "$sb/cwd/scripts/one.sh")" "MINE"
+}
+test_merge_dry_run_lists_create_vs_skip
 
 printf "\n"
 if [[ $FAIL -eq 0 ]]; then
