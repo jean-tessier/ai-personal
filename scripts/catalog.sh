@@ -29,6 +29,19 @@ read_dependencies_json() {
   cat "$file"
 }
 
+# Splice a suite's optional manifest.json (ADR-0008) verbatim, else "null".
+# Malformed JSON fails the catalog build, same as read_dependencies_json.
+read_manifest_json() {
+  local file="$1/manifest.json"
+  [[ -s "$file" ]] || { printf 'null'; return; }
+  if command -v python3 &>/dev/null; then
+    python3 -m json.tool "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+  elif command -v jq &>/dev/null; then
+    jq . "$file" >/dev/null 2>&1 || { echo "catalog.sh: invalid JSON in $file" >&2; return 1; }
+  fi
+  cat "$file"
+}
+
 # Extract first non-empty value of a YAML frontmatter key
 yaml_val() {
   local file="$1" key="$2"
@@ -74,9 +87,10 @@ while IFS= read -r -d '' dir; do
     files_json="${files_json:+$files_json,}\"$(quote "$rel")\""
   done < <(find "$dir" -mindepth 2 -name "*.md" -print0 2>/dev/null | sort -z)
   deps="$(read_dependencies_json "$dir")" || exit 1
-  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s],"pluginShaped":%s,"dependencies":%s}' \
+  manifest="$(read_manifest_json "$dir")" || exit 1
+  entry="$(printf '{"name":"%s","path":"suites/%s","hasReadme":%s,"files":[%s],"pluginShaped":%s,"dependencies":%s,"manifest":%s}' \
     "$(quote "$name")" "$(quote "$name")" "$(has_file "$dir/README.md")" "$files_json" \
-    "$(is_plugin_shaped "$dir")" "$deps")"
+    "$(is_plugin_shaped "$dir")" "$deps" "$manifest")"
   suites_json="${suites_json:+$suites_json,}$entry"
 done < <(find "$REPO/suites" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
 
