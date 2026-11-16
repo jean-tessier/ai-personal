@@ -1545,10 +1545,12 @@ test_uninstall_path_guards_abort_before_deleting() {
   sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
   mkdir "$sb/outside"; printf 'PRECIOUS\n' > "$sb/outside/f"; ln -s "$sb/outside" "$sb/cwd/.claude/esc"
+  mkdir "$sb/cwd/.git"; printf 'ref: refs/heads/main\n' > "$sb/cwd/.git/HEAD"
   cp "$rec" "$sb/pristine.json"; n="$(count_files "$sb/cwd")"
-  for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f'; do
+  for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f' \
+      $'.claude/a\e[2K' '.claude/a<NUL>b' '.git/HEAD'; do
     cp "$sb/pristine.json" "$rec"
-    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3]:"sha256:0"}}' "$bad"
+    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0"):"sha256:0"}}' "$bad"
     out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
     assert_exit "path '$bad': exits 1" 1 "$code"
     assert_contains "path '$bad': says why" "$out" "unsafe path"
@@ -1556,6 +1558,12 @@ test_uninstall_path_guards_abort_before_deleting() {
     assert_exit "path '$bad': nothing deleted" "$n" "$(count_files "$sb/cwd")"
   done
   assert_contains "the escape target is untouched" "$(cat "$sb/outside/f")" "PRECIOUS"
+  cp "$sb/pristine.json" "$rec"
+  rec_edit "$rec" 'a=d["assets"]; a["skills/x\x1b[2K"]=a.pop("skills/atomic-commits")'
+  out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
+  assert_exit "control character in an asset name: exits 1" 1 "$code"
+  assert_contains "control character in an asset name: says why" "$out" "unsafe asset name"
+  assert_exit "control character in an asset name: nothing deleted" "$n" "$(count_files "$sb/cwd")"
   sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
   rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{".claude/x":"sha256:0"}}'

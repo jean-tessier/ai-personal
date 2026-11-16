@@ -325,12 +325,17 @@ elif mode == "uninstall":
     rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
     root = os.path.dirname(path)
     # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
+    # Names are printed, so control characters (terminal escapes, NUL) refuse the whole record.
+    # A .git segment is refused too: uninstall otherwise trusts the record you hold (run --dry-run first).
+    ctrl = lambda s: any(ord(c) < 32 or 127 <= ord(c) < 160 for c in s)
     paths = {}
     for a, e in rec["assets"].items():
+        if ctrl(a):
+            sys.exit(f"install record {path}: unsafe asset name {a!r}; nothing was deleted")
         for k in e["files"]:
             t = k[2:] if user and k.startswith("~/") else None if user else k
-            if (t is None or not t or "\\" in t or os.path.isabs(t) or t.startswith("~")
-                    or any(s in ("", ".", "..") for s in t.split("/"))
+            if (t is None or not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
+                    or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))
                     or not entry(os.path.join(base, t)).startswith(bb + os.sep)):
                 sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
             paths[k] = os.path.join(base, t)
