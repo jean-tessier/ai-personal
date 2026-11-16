@@ -49,12 +49,14 @@ example `.claude/.ai-personal-install.json`, `~/.claude/.ai-personal-install.jso
   tell an untouched file from an edited one.
 - **Every write path calls `record_write asset dest`**: plain copies, Copilot-translated copies and
   dependency copies all go through `apply_selection()`. `record_write` flushes at once, right after
-  the placement, so a failure part-way through an install never leaves placed files unrecorded.
+  the placement, so every completed placement is recorded even if a later one fails (a `cp -R` or
+  transform failure leaves that asset's partial copy unrecorded, the safe direction).
   `_json record` expands directories, hashes the files with python `hashlib` (python3 is already
   required, so there is no `shasum` vs `sha256sum` split) and merges them in. Per asset, the entries
   under the placed destination are replaced (keys the new version no longer ships are dropped) and
-  `installedAt` is refreshed; other assets and paths are kept. The record is written to a temp file
-  and renamed into place.
+  `installedAt` is refreshed; other assets and paths are kept. The record is written to a fresh temp
+  file (any existing path or symlink there is unlinked first, then created exclusively) and renamed
+  into place.
 - **Only what was written is recorded.** A destination skipped because it exists is not logged, so
   a user's own skill with the same name is never claimed. `--dry-run` writes no record.
 - **`source.ref` is the `--ref` value** (default `main`), and `null` under `--local`. It describes
@@ -74,6 +76,19 @@ Alternatives considered:
   hold per-machine hashes.
 - **Asset-level records (no per-file list)** — can't uninstall merge-created files or detect edits.
 - **Hash with `shasum`/`sha256sum`** — needs per-platform detection; `hashlib` is already available.
+
+## Consumers (IM2 `--uninstall`) MUST
+
+The record is a user-editable file, so a consumer that deletes files treats it as untrusted:
+
+- Re-run install's record validation, through one shared loader, before deleting anything.
+- Check every path by text: reject absolute, empty, `.`/`..` segments and backslashes; project-scope paths must not start with `~`; user-scope paths MUST start with `~/`.
+- Don't restrict paths to the scope root (Copilot `config` and Makefile-style placements sit at the project root), but require each path's real parent to stay inside `$PWD` (project) or `$HOME` (user).
+- `lstat` before touching: never delete the record file or the scope root, delete only regular files or symlinks (`unlink` never follows), and skip directories.
+- Never delete a path that is also claimed by an asset that is not being uninstalled.
+- If any recorded hash mismatches, keep the whole asset; `--force` lists every mismatched path before deleting.
+- Rewrite the shrunken record with the same safe temp write (unlink, then exclusive create, then rename).
+- Prune empty directories bottom-up, never above the scope root, the project root or `$HOME`.
 
 ## Consequences
 
