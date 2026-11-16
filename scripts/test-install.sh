@@ -1551,13 +1551,14 @@ test_uninstall_path_guards_abort_before_deleting() {
   mkdir "$sb/cwd/.git"; printf 'ref: refs/heads/main\n' > "$sb/cwd/.git/HEAD"; ln -s .git "$sb/cwd/glink"
   cp "$rec" "$sb/pristine.json"; n="$(count_files "$sb/cwd")"
   for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f' \
-      $'.claude/a\e[2K' '.claude/a<NUL>b' '.git/HEAD' '.GIT/HEAD' 'glink/HEAD'; do
+      $'.claude/a\e[2K' '.claude/a<NUL>b' '.claude/a<RLO>dm.LLIKS' '.git/HEAD' '.GIT/HEAD' 'glink/HEAD'; do
     cp "$sb/pristine.json" "$rec"
-    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0"):"sha256:0"}}' "$bad"
+    rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0").replace("<RLO>","‮"):"sha256:0"}}' "$bad"
     out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
     assert_exit "path '$bad': exits 1" 1 "$code"
     assert_contains "path '$bad': says why" "$out" "unsafe path"
     assert_not_contains "path '$bad': no traceback" "$out" "Traceback"
+    [[ "$out" != *$'\e[2K'* && "$out" != *"$(printf '\342\200\256')"* ]] && _ok "path '$bad': no raw escape printed" || _fail "path '$bad': no raw escape printed"
     assert_exit "path '$bad': nothing deleted" "$n" "$(count_files "$sb/cwd")"
   done
   assert_contains "the escape target is untouched" "$(cat "$sb/outside/f")" "PRECIOUS"
@@ -1608,7 +1609,7 @@ test_uninstall_prune_stops_at_cwd() {
 
 test_uninstall_refuses_bad_or_missing_record() {
   _head "--uninstall refuses a missing, corrupt or foreign record"
-  local sb out code n bad
+  local sb out code n bad i
   sb="$(new_sandbox)"
   out="$(run_uninstall "$sb" --harness claude-code --scope project </dev/null 2>&1)"; code=$?
   assert_exit "no record: exits 0" 0 "$code"
@@ -1621,18 +1622,20 @@ test_uninstall_refuses_bad_or_missing_record() {
   assert_exit "foreign scope: exits 1" 1 "$code"
   assert_contains "foreign scope: names both" "$out" "belongs to claude-code/project, not claude-code/user"
   assert_exit "foreign scope: nothing deleted" "$n" "$(count_files "$sb/home")"
-  for bad in '{bad' '{"version":2,"harness":"claude-code","scope":"user","assets":{}}' '{"version":1,"harness":"claude-code","scope":"user","assets":{"s":{"files":[]}}}'; do
+  for bad in '{bad' '{"version":2,"harness":"claude-code","scope":"user","assets":{}}' '{"version":1,"harness":"claude-code","scope":"user","assets":{"s":{"files":[]}}}' \
+      '{"version":1,"harness":"claude-code\u001b[2K","scope":"user","assets":{}}'; do
     printf '%s' "$bad" > "$sb/home/.claude/.ai-personal-install.json"
     out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
     assert_exit "record '$bad': exits 1" 1 "$code"
     assert_contains "record '$bad': clean message" "$out" "install record"
     assert_not_contains "record '$bad': no traceback" "$out" "Traceback"
+    assert_not_contains "record '$bad': no raw escape printed" "$out" $'\e[2K'
     assert_exit "record '$bad': nothing deleted" "$n" "$(count_files "$sb/home")"
   done
-  # a FIFO record must be refused at once, never opened (a stuck reader is released after 10s)
+  # a FIFO record must be refused, never opened (a stuck reader is released after 60s)
   rm "$sb/home/.claude/.ai-personal-install.json"; mkfifo "$sb/home/.claude/.ai-personal-install.json"
   ( run_uninstall "$sb" --harness claude-code --scope user </dev/null > "$sb/fifo.out" 2>&1; echo $? > "$sb/fifo.code" ) &
-  for i in 1 2 3 4 5 6 7 8 9 10; do [[ -f "$sb/fifo.code" ]] && break; sleep 1; done
+  i=0; while [[ ! -f "$sb/fifo.code" && $i -lt 60 ]]; do sleep 1; i=$((i + 1)); done
   [[ -f "$sb/fifo.code" ]] && _ok "FIFO record: returns without waiting on it" || _fail "FIFO record: returns without waiting on it"
   python3 -c 'import os,sys; os.close(os.open(sys.argv[1], os.O_WRONLY|os.O_NONBLOCK))' "$sb/home/.claude/.ai-personal-install.json" 2>/dev/null
   wait

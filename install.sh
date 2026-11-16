@@ -109,7 +109,8 @@ def load_record(path, harness, scope):
             isinstance(a, dict) and isinstance(a.get("files"), dict) for a in rec["assets"].values()):
         bad("malformed assets")
     if (rec.get("harness"), rec.get("scope")) != (harness, scope):
-        sys.exit(f"install record {path} belongs to {rec.get('harness')}/{rec.get('scope')}, not {harness}/{scope}")
+        show = lambda v: v if isinstance(v, str) and v.isprintable() else repr(v)  # no raw escapes on the terminal
+        sys.exit(f"install record {path} belongs to {show(rec.get('harness'))}/{show(rec.get('scope'))}, not {harness}/{scope}")
     return rec
 
 # Safe record write: fresh temp file (a planted symlink is unlinked, never followed), then rename.
@@ -332,9 +333,10 @@ elif mode == "uninstall":
     rec = load_record(path, harness, scope)  # guard 1: version, shape, harness/scope
     root = os.path.dirname(path)
     # guards 2 and 3: every recorded path, by text, then its real parent inside the project root or $HOME
-    # Names are printed, so control characters (terminal escapes, NUL) refuse the whole record.
-    # A .git segment is refused too: uninstall otherwise trusts the record you hold (run --dry-run first).
-    ctrl = lambda s: any(ord(c) < 32 or 127 <= ord(c) < 160 for c in s)
+    # Names are printed, so anything unprintable (terminal escapes, NUL, bidi overrides) refuses the
+    # whole record. A .git segment is refused too: uninstall otherwise trusts the record you hold
+    # (run --dry-run first).
+    ctrl = lambda s: not s.isprintable()
     # User scope is confined to the scope root (every user-scope placement sits there), so a
     # shared record can't name ~/.zshrc; project scope may place at the project root (guard 3).
     sr = spec[:-len(".ai-personal-install.json")]  # e.g. "~/.claude/"
