@@ -337,15 +337,19 @@ elif mode == "uninstall":
     # whole record. A .git segment is refused too: uninstall otherwise trusts the record you hold
     # (run --dry-run first).
     ctrl = lambda s: not s.isprintable()
-    # User scope is confined to the scope root (every user-scope placement sits there), so a
-    # shared record can't name ~/.zshrc; project scope may place at the project root (guard 3).
-    sr = spec[:-len(".ai-personal-install.json")]  # e.g. "~/.claude/"
+    # A record read from $HOME (user scope, or project scope run from $HOME) is confined to its
+    # scope root, where every such placement sits, so it can't name ~/.zshrc; any other project
+    # scope may place at the project root (guard 3).
+    sr = spec[:-len(".ai-personal-install.json")]  # the scope root as keys spell it: "~/.claude/" or ".claude/"
+    confine = user or bb == real(home)
+    if confine and root == bb:
+        sys.exit(f"install record {path}: the scope root is {bb} itself; nothing was deleted")
     paths = {}
     for a, e in rec["assets"].items():
         if ctrl(a):
             sys.exit(f"install record {path}: unsafe asset name {a!r}; nothing was deleted")
         for k in e["files"]:
-            if user and not k.startswith(sr):
+            if confine and not k.startswith(sr):
                 sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr}; nothing was deleted")
             t = k[2:] if user else k
             r = entry(os.path.join(base, t)) if t and not ctrl(k) else ""

@@ -1592,6 +1592,46 @@ test_uninstall_path_guards_abort_before_deleting() {
   assert_exists "'.GIT/HEAD' via a symlinked .git: nothing deleted" "$sb/cwd/gitdir/HEAD"
 }
 
+# write_rec <out> <harness> <scope> <base> <key prefix> <file...>: a one-asset record listing each
+# file (relative to <base>) under "<key prefix><file>" with its real sha256.
+write_rec() {
+  python3 -c 'import hashlib,json,os,sys; o,h,s,b,p=sys.argv[1:6]; json.dump({"version":1,"harness":h,"scope":s,"assets":{"skills/zz":{"files":{p+f:"sha256:"+hashlib.sha256(open(os.path.join(b,f),"rb").read()).hexdigest() for f in sys.argv[6:]}}}},open(o,"w"))' "$@"
+}
+
+test_uninstall_confined_when_the_record_is_in_home() {
+  _head "--uninstall confines every record read from \$HOME to its scope root"
+  local sb out code n src
+  # a project-scope record read from $HOME is confined like a user-scope one
+  sb="$(new_sandbox)"; mkdir -p "$sb/home/.claude" "$sb/home/.ssh"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  write_rec "$sb/home/.claude/.ai-personal-install.json" claude-code project "$sb/home" "" .zshrc .ssh/id_ed25519
+  n="$(count_files "$sb/home")"
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "project scope from \$HOME: exits 1" 1 "$code"
+  assert_contains "project scope from \$HOME: says why" "$out" "outside the scope root"
+  assert_exit "project scope from \$HOME: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # a real project install made from $HOME still round-trips
+  sb="$(new_sandbox)"
+  ( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1 )
+  out="$( cd "$sb/home" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope project </dev/null 2>&1 )"; code=$?
+  assert_exit "project install from \$HOME: uninstall exits 0" 0 "$code"
+  assert_exit "project install from \$HOME: no file left" 0 "$(count_files "$sb/home")"
+  # a scope root that is $HOME itself (a hostile harnesses.json) confines nothing, so it is refused
+  sb="$(new_sandbox)"; src="$sb/fake_src"; mkdir -p "$src/scripts" "$src/skills/s1"
+  cp "$REPO/scripts/catalog.sh" "$src/scripts/"; printf -- '---\nname: s1\ndescription: d\n---\n' > "$src/skills/s1/SKILL.md"
+  printf '{"h":{"label":"H","scopes":{"user":"~"},"mapping":{"skills":"skills/{name}"}}}' > "$src/scripts/harnesses.json"
+  printf 'alias x=y\n' > "$sb/home/.zshrc"
+  write_rec "$sb/home/.ai-personal-install.json" h user "$sb/home" "~/" .zshrc
+  out="$( cd "$sb/cwd" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$src" --uninstall --harness h --scope user </dev/null 2>&1 )"; code=$?
+  assert_exit "scope root ~: exits 1" 1 "$code"
+  assert_contains "scope root ~: says why" "$out" "itself"
+  assert_exists "scope root ~: nothing deleted" "$sb/home/.zshrc"
+}
+
 # The project root is never pruned, even when it sits inside the scope root.
 test_uninstall_prune_stops_at_cwd() {
   _head "--uninstall never prunes the directory it runs from"
@@ -1800,6 +1840,7 @@ test_uninstall_reads_only_the_scope_root_record
 test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
 test_uninstall_prune_stops_at_cwd
+test_uninstall_confined_when_the_record_is_in_home
 test_uninstall_refuses_bad_or_missing_record
 test_uninstall_unreadable_asset_dir_aborts
 test_uninstall_keeps_shared_record_and_scope_root
