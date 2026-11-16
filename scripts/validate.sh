@@ -159,14 +159,14 @@ for h, placements in data.items():
         if p["mode"] not in ("copy", "merge"): print(f"{at}: mode must be copy or merge")
         src = p["src"]
         if not isinstance(src, str) or not src: print(f"{at}: src must be a non-empty string")
-        elif src.startswith("/") or ".." in src.split("/"): print(f"{at}: src must be relative with no '..'")
+        elif src.startswith("/") or {"", ".", ".."} & set(src.split("/")): print(f"{at}: src must be relative with no '.', '..' or empty segments")
         elif not os.path.exists(os.path.join(suite, src)): print(f"{at}: src does not exist: {src}")
 PY
   while IFS= read -r msg; do
     [[ -z "$msg" ]] && continue
     ((errs++)) || true
     _fail "$label/manifest.json — $msg"
-  done < <(python3 -c "$py" "$file" "$dir" "$REPO/scripts/harnesses.json" | tr -d '\r')
+  done < <({ python3 -c "$py" "$file" "$dir" "$REPO/scripts/harnesses.json" || echo "check crashed (python traceback above)"; } | tr -d '\r')
   [[ $errs -eq 0 ]] && _ok "$label/manifest.json"
   return 0
 }
@@ -311,7 +311,7 @@ PY
         [[ -z "$msg" ]] && continue
         ((lint_errs++)) || true
         _fail "harnesses.$msg"
-      done < <(python3 -c "$lint_py" "$harnesses_file" | tr -d '\r')
+      done < <({ python3 -c "$lint_py" "$harnesses_file" || echo "json — vocabulary lint crashed (python traceback above)"; } | tr -d '\r')
       [[ $lint_errs -eq 0 ]] && _ok "harnesses mapping/resourceKinds vocabulary"
     else
       _warn "python3 not found; skipping per-harness structural checks"
