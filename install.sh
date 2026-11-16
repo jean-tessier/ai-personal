@@ -329,15 +329,22 @@ elif mode == "uninstall":
     # Names are printed, so control characters (terminal escapes, NUL) refuse the whole record.
     # A .git segment is refused too: uninstall otherwise trusts the record you hold (run --dry-run first).
     ctrl = lambda s: any(ord(c) < 32 or 127 <= ord(c) < 160 for c in s)
+    # User scope is confined to the scope root (every user-scope placement sits there), so a
+    # shared record can't name ~/.zshrc; project scope may place at the project root (guard 3).
+    sr = spec[:-len(".ai-personal-install.json")]  # e.g. "~/.claude/"
     paths = {}
     for a, e in rec["assets"].items():
         if ctrl(a):
             sys.exit(f"install record {path}: unsafe asset name {a!r}; nothing was deleted")
         for k in e["files"]:
-            t = k[2:] if user and k.startswith("~/") else None if user else k
-            if (t is None or not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
+            if user and not k.startswith(sr):
+                sys.exit(f"install record {path}: {k!r} in {a} is outside the scope root {sr}; nothing was deleted")
+            t = k[2:] if user else k
+            r = entry(os.path.join(base, t)) if t and not ctrl(k) else ""
+            if (not t or ctrl(k) or "\\" in t or os.path.isabs(t) or t.startswith("~")
                     or any(s.lower() in ("", ".", "..", ".git") for s in t.split("/"))
-                    or not entry(os.path.join(base, t)).startswith(bb + os.sep)):
+                    or not r.startswith(bb + os.sep)
+                    or ".git" in r[len(bb) + 1:].lower().split(os.sep)):  # a symlink into .git, too
                 sys.exit(f"install record {path}: unsafe path {k!r} in {a}; nothing was deleted")
             paths[k] = os.path.join(base, t)
     sel = [a for a in rec["assets"] if not cats or a.split("/")[0] in cats]

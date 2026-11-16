@@ -1548,10 +1548,10 @@ test_uninstall_path_guards_abort_before_deleting() {
   sb="$(new_sandbox)"; rec="$sb/cwd/.claude/.ai-personal-install.json"
   run_install "$sb" --harness claude-code --scope project --assets skills </dev/null >/dev/null 2>&1
   mkdir "$sb/outside"; printf 'PRECIOUS\n' > "$sb/outside/f"; ln -s "$sb/outside" "$sb/cwd/.claude/esc"
-  mkdir "$sb/cwd/.git"; printf 'ref: refs/heads/main\n' > "$sb/cwd/.git/HEAD"
+  mkdir "$sb/cwd/.git"; printf 'ref: refs/heads/main\n' > "$sb/cwd/.git/HEAD"; ln -s .git "$sb/cwd/glink"
   cp "$rec" "$sb/pristine.json"; n="$(count_files "$sb/cwd")"
   for bad in "$sb/outside/f" '' '.claude/../../outside/f' '.claude/./x' '.claude//x' '.claude\x' '~/x' '.claude/esc/f' \
-      $'.claude/a\e[2K' '.claude/a<NUL>b' '.git/HEAD'; do
+      $'.claude/a\e[2K' '.claude/a<NUL>b' '.git/HEAD' '.GIT/HEAD' 'glink/HEAD'; do
     cp "$sb/pristine.json" "$rec"
     rec_edit "$rec" 'd["assets"]["skills/zz"]={"files":{sys.argv[3].replace("<NUL>","\0"):"sha256:0"}}' "$bad"
     out="$(run_uninstall "$sb" --harness claude-code --scope project --force </dev/null 2>&1)"; code=$?
@@ -1574,6 +1574,29 @@ test_uninstall_path_guards_abort_before_deleting() {
   out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
   assert_exit "user scope, path not ~/-anchored: exits 1" 1 "$code"
   assert_exit "user scope, path not ~/-anchored: nothing deleted" "$n" "$(count_files "$sb/home")"
+  # user-scope paths are confined to the scope root, even with the right hashes
+  mkdir "$sb/home/.ssh"; printf 'alias x=y\n' > "$sb/home/.zshrc"; printf 'KEY\n' > "$sb/home/.ssh/id_ed25519"
+  rec_edit "$rec" 'import hashlib,os; h=lambda f: "sha256:"+hashlib.sha256(open(os.path.join(sys.argv[3],f),"rb").read()).hexdigest(); d["assets"]["skills/zz"]={"files":{"~/"+f:h(f) for f in (".zshrc",".ssh/id_ed25519")}}' "$sb/home"
+  n="$(count_files "$sb/home")"
+  out="$(run_uninstall "$sb" --harness claude-code --scope user </dev/null 2>&1)"; code=$?
+  assert_exit "user scope, path outside the scope root: exits 1" 1 "$code"
+  assert_contains "user scope, path outside the scope root: says why" "$out" "outside the scope root"
+  assert_exit "user scope, path outside the scope root: nothing deleted" "$n" "$(count_files "$sb/home")"
+}
+
+# The project root is never pruned, even when it sits inside the scope root.
+test_uninstall_prune_stops_at_cwd() {
+  _head "--uninstall never prunes the directory it runs from"
+  local sb out code rec
+  sb="$(new_sandbox)"; rec="$sb/home/.claude/.ai-personal-install.json"
+  run_install "$sb" --harness claude-code --scope user --assets skills </dev/null >/dev/null 2>&1
+  mkdir "$sb/home/.claude/p"; printf 'x\n' > "$sb/home/.claude/p/f"
+  rec_edit "$rec" 'import hashlib; d["assets"]["skills/zz"]={"files":{"~/.claude/p/f":"sha256:"+hashlib.sha256(b"x\n").hexdigest()}}'
+  out="$( cd "$sb/home/.claude/p" && HOME="$sb/home" PATH="$sb/bin:$PATH" \
+    bash "$INSTALL" --local "$REPO" --uninstall --harness claude-code --scope user </dev/null 2>&1 )"; code=$?
+  assert_exit "exits 0" 0 "$code"
+  assert_missing "the recorded file is removed" "$sb/home/.claude/p/f"
+  [[ -d "$sb/home/.claude/p" ]] && _ok "the directory it ran from stays" || _fail "the directory it ran from stays"
 }
 
 test_uninstall_refuses_bad_or_missing_record() {
@@ -1736,6 +1759,7 @@ test_uninstall_round_trip
 test_uninstall_reads_only_the_scope_root_record
 test_uninstall_keeps_modified_asset_and_user_files
 test_uninstall_path_guards_abort_before_deleting
+test_uninstall_prune_stops_at_cwd
 test_uninstall_refuses_bad_or_missing_record
 test_uninstall_keeps_shared_record_and_scope_root
 test_uninstall_file_shared_by_two_uninstalled_assets
