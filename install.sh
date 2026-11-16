@@ -17,6 +17,7 @@
 #   --force             overwrite existing destination files/dirs (default: skip)
 #   --yes-deps          auto-add dependencies (from dependencies.json) with no prompt
 #   --no-deps           skip dependencies instead of adding/prompting
+#   --uninstall         remove what the install record says was installed (no fetch)
 #   -h, --help          show usage
 #
 # Exit:   0 success · 1 bad input or fetch/copy failure
@@ -40,6 +41,7 @@ command -v python3 &>/dev/null || { _fail "python3 is required to parse catalog/
 usage() {
   cat <<'USAGE'
 Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--ref <ref>] [--dry-run] [--force] [--yes-deps|--no-deps]
+       install.sh --uninstall --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [--dry-run] [--force]
 
   --harness   harness key from scripts/harnesses.json (e.g. claude-code, copilot)
   --scope     scope key declared for that harness (e.g. project, user)
@@ -50,6 +52,8 @@ Usage: install.sh --harness <name> --scope <scope> [--assets <cat1,cat2,...>] [-
   --force     overwrite existing destination files/dirs (default: skip existing)
   --yes-deps  auto-add dependencies (from dependencies.json) with no prompt
   --no-deps   skip dependencies instead of adding/prompting
+  --uninstall remove the files the install record lists, in the given categories (default: all);
+              a modified asset is kept whole unless --force; --dry-run lists, deletes nothing
   -h, --help  show this help
 USAGE
 }
