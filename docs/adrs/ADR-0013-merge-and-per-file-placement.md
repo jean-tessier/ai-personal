@@ -1,6 +1,6 @@
 ---
 date: 2026-11-16
-decision_date: 2026-11-16
+decision_date: 2026-11-15
 description: Manifest placements copy per file; merge creates missing files and never touches an existing one unless --force
 status: accepted
 ---
@@ -17,7 +17,7 @@ ADR-0008 lets a suite's `manifest.json` declare placements with `mode: "copy"` o
 but left merge's conflict behavior undecided. Some placements land in the user's own tree
 (`./scripts`, `./Makefile`, `.github/copilot-instructions.md`), so the whole-directory
 `rm -rf` + `cp -R` that plain skills and suites use would destroy user files. The owner chose
-skip-or-`--force` over format-aware merging (owner decision Q2, 2026-11-16).
+skip-or-`--force` over format-aware merging (owner decision Q2, 2026-11-15).
 
 ## Decision
 
@@ -28,13 +28,14 @@ skip-or-`--force` over format-aware merging (owner decision Q2, 2026-11-16).
   under `--force`.
 - **`merge` is `copy` with one difference: it never touches an existing file by default.** It
   creates missing files; an existing regular file is left as is, and every such path is listed once
-  in a single summary line at the end of the run (not one notice per file), so the user can merge by
-  hand. Under `--force` an existing file is overwritten per file, exactly like `copy`.
+  in a single note at the end of the run, one project-relative path per line (not one notice per
+  file), so the user can merge by hand. Under `--force` an existing file is overwritten per file, exactly like `copy`.
 - **Record interaction (ADR-0012).** Only files actually written are recorded. A skipped
   pre-existing file is not, so `--uninstall` never touches it. Merge-created files are recorded with
   their sha256 and can be uninstalled.
 - **`--dry-run`** prints create vs skip per file (a skipped merge file reads "merge would leave it
-  untouched") and writes nothing, including no record.
+  untouched", or "would overwrite" under `--force`, as the real run would do) and writes nothing,
+  including no record.
 
 ## Alternatives considered
 
@@ -49,6 +50,4 @@ skip-or-`--force` over format-aware merging (owner decision Q2, 2026-11-16).
   merge by hand.
 - `--force` is the single opt-in to clobber; it replaces files only, never directories, so a user's
   extra file in the same directory survives.
-- A merge-managed file that exists before install is never in the record, so it also never
-  receives later suite updates unless the user reinstalls with `--force`.
-- The summary joins paths with spaces, so a path that contains spaces reads ambiguously there.
+- A re-install never updates a merge file, even one an earlier install created and the user never edited: the summary lists it, and `--force` is the only way to take the suite's newer version, which also discards any user edits to that file.
