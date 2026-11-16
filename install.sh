@@ -131,6 +131,10 @@ elif mode == "translate":
     t = tr.get(args[1]) if isinstance(tr, dict) else None
     print(t if isinstance(t, str) else "(invalid)")
 
+elif mode == "has_resource_kinds":
+    harnesses = load(os.environ["HARNESSES_JSON"])
+    sys.exit(0 if (harnesses.get(args[0], {}).get("resourceKinds") or {}).get(args[1]) else 1)
+
 elif mode == "categories":
     catalog = load(os.environ["CATALOG_JSON"])
     assets = catalog.get("assets", {})
@@ -165,13 +169,13 @@ elif mode == "suite_plugin_shaped":
 
 elif mode == "placements":
     # placements <suite> <harness> <scope> <src root>: expand the suite's manifest.json placements
-    # (ADR-0008) into per-file rows. Exit 1: no manifest. Else one stdout line kind per row:
+    # (ADR-0008) into per-file rows. Exit 3: no manifest (any other non-zero exit is a crash). Else one stdout line kind per row:
     #   ERR<TAB>msg (refuse) | OMIT (harness not keyed) | NOTE<TAB>msg | ROW<TAB>src_rel<TAB>dest<TAB>mode
     suite, harness, scope, src_root = args
     it = find_item(load(os.environ["CATALOG_JSON"]), "suites", suite)
     man = it.get("manifest") if it else None
     if man is None:
-        sys.exit(1)
+        sys.exit(3)
     lines = []
     def err(msg):
         print("ERR\tsuite '%s' manifest: %s" % (suite, msg))
@@ -181,10 +185,16 @@ elif mode == "placements":
     if harness not in man:
         print("OMIT")
         sys.exit(0)
-    kinds = (load(os.environ["HARNESSES_JSON"]).get(harness, {}).get("resourceKinds") or {}).get(scope) or {}
+    hdef = load(os.environ["HARNESSES_JSON"]).get(harness, {})
+    kinds = (hdef.get("resourceKinds") or {}).get(scope) or {}
+    home_anchored = hdef.get("scopes", {}).get(scope, "").startswith("~")
+    def ctl(t):
+        return any(ord(c) < 32 or ord(c) == 127 for c in t)
     base = os.path.realpath(os.path.join(src_root, it["path"]))
     def tree(root):  # [(path relative to root or "", abs path)] of a file or directory tree
-        if os.path.isfile(root) and not os.path.islink(root):
+        if os.path.islink(root):
+            err("symlink in placement: " + root)
+        if os.path.isfile(root):
             return [("", root)]
         found = []
         for d, ds, fs in os.walk(root):
@@ -199,7 +209,7 @@ elif mode == "placements":
         kind, src, pmode = p["kind"], p["src"], p["mode"]
         if kind not in ("agents", "skills", "instructions", "hooks", "config") or pmode not in ("copy", "merge"):
             err("bad kind or mode in placement '%s'" % src)
-        if src.startswith("/") or "\\" in src or any(s in ("", ".", "..") for s in src.split("/")):
+        if src.startswith("/") or "\\" in src or ctl(src) or any(s in ("", ".", "..") for s in src.split("/")):
             err("src must be relative with no empty, '.' or '..' segments: '%s'" % src)
         full = os.path.realpath(os.path.join(base, src))
         if not full.startswith(base + os.sep) or not os.path.exists(full):
@@ -210,9 +220,11 @@ elif mode == "placements":
             continue
         tmpl = tmpl.replace("{suite}", suite)
         if kind == "instructions":
+            if not os.path.isfile(full):
+                err("kind 'instructions' needs a file src: '%s'" % src)
             roots = [(tmpl, full)]
         elif kind == "config":
-            roots = [(tmpl.replace("{relpath}", os.path.basename(full)), full)]
+            roots = [(tmpl.replace("{relpath}", os.path.basename(src)), full)]
         elif os.path.isdir(full):
             roots = [(tmpl.replace("{basename}", n), os.path.join(full, n)) for n in sorted(os.listdir(full))]
         else:
@@ -220,10 +232,13 @@ elif mode == "placements":
         for droot, sroot in roots:
             for rel, a in tree(sroot):
                 dest = droot + ("/" + rel if rel else "")
-                bare = os.path.normpath(dest[2:] if dest.startswith("~/") else dest)
-                if dest.startswith("/") or bare in (".", "..") or bare.startswith("../") or "\t" in dest or "\n" in dest:
+                srel = it["path"] + "/" + os.path.relpath(a, base).replace(os.sep, "/")
+                # same text rule as ADR-0012's record consumer: root-anchored, ~/ only for a home-anchored scope
+                segs = (dest[2:] if dest.startswith("~/") else dest).split("/")
+                if (dest.startswith("/") or "\\" in dest or ctl(dest) or ctl(srel) or dest.startswith("~/") != home_anchored
+                        or any(g in ("", ".", "..") for g in segs)):
                     err("unsafe destination '%s'" % dest)
-                lines.append("ROW\t%s\t%s\t%s" % (it["path"] + "/" + os.path.relpath(a, base).replace(os.sep, "/"), dest, pmode))
+                lines.append("ROW\t%s\t%s\t%s" % (srel, dest, pmode))
     print("\n".join(lines))
 
 elif mode == "record":
@@ -263,6 +278,7 @@ elif mode == "record":
             for key, file in placed:
                 with open(file, "rb") as fh:
                     entry["files"][key] = "sha256:" + hashlib.sha256(fh.read()).hexdigest()
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         tmp = path + ".tmp"
         try:
             os.unlink(tmp)  # a planted symlink here must not be followed
@@ -443,18 +459,23 @@ plan_item() {
   name="${asset##*/}"
   # A suite manifest.json (ADR-0008) replaces mapping.suites and any translate: one
   # row per placed file, or a skip when the manifest omits this harness.
-  if [[ "$category" == suites ]] && placements=$(_json placements "$name" "$HARNESS" "$SCOPE" "$SRC"); then
-    local kind rel dest pmode msg rows="$WORK/placement_rows.tsv"
-    : > "$rows"
+  # Exit 3 means "no manifest" (fall through to mapping); any other failure is a crash and
+  # must not fall back to the wholesale copy, which would break the manifest's precedence.
+  local prc=3
+  if [[ "$category" == suites ]]; then
+    prc=0; placements=$(_json placements "$name" "$HARNESS" "$SCOPE" "$SRC") || prc=$?
+  fi
+  if [[ $prc -ne 3 ]]; then
+    if [[ $prc -ne 0 ]]; then _fail "$label: manifest placement failed"; exit 1; fi
+    local kind rel dest pmode
     while IFS=$'\t' read -r kind rel dest pmode; do
       case "$kind" in
         ERR)  _fail "$rel"; exit 1 ;;
         OMIT) _warn "$label: manifest has no placements for harness '$HARNESS' — skipped"; return 1 ;;
         NOTE) _warn "$label: $rel" ;;
-        ROW)  printf '%s\t%s\t%s\t%s\t-\n' "$asset" "$rel" "$dest" "$pmode" >> "$rows" ;;
+        ROW)  printf '%s\t%s\t%s\t%s\t-\n' "$asset" "$rel" "$dest" "$pmode" >> "$out" ;;
       esac
     done <<< "$placements"
-    cat "$rows" >> "$out"
     return 0
   fi
   if ! template=$(_json mapping "$HARNESS" "$category"); then
@@ -504,7 +525,8 @@ select_assets() {
   for category in "${CATEGORIES[@]}"; do
     # Early, whole-category check (before the picker would ask about items that
     # could never be placed); plan_item() makes the authoritative per-item call.
-    if ! _json mapping "$HARNESS" "$category" >/dev/null; then
+    # (a suite may be placed from its manifest by a harness that only has resourceKinds)
+    if ! _json mapping "$HARNESS" "$category" >/dev/null && ! { [[ "$category" == suites ]] && _json has_resource_kinds "$HARNESS" "$SCOPE"; }; then
       _warn "category '$category' has no mapping for harness '$HARNESS' — skipped"
       continue
     fi
@@ -605,7 +627,7 @@ resolve_dependencies() {
     # selected (matched on the asset column), minus ones plan_item() already
     # rejected in an earlier round, and minus dupes within this pass.
     : > "$candidates_file"
-    while IFS=$'\t' read -r asset src_rel dest mode transform; do
+    while IFS= read -r asset; do
       while IFS= read -r dep; do
         [[ -z "$dep" ]] && continue
         grep -qxF -- "$dep" <(cut -f1 "$SELECTION_FILE") && continue
@@ -613,7 +635,7 @@ resolve_dependencies() {
         grep -qxF "$dep" "$candidates_file" && continue
         printf '%s\n' "$dep" >> "$candidates_file"
       done < <(_json deps "$asset")
-    done < "$SELECTION_FILE"
+    done < <(cut -f1 "$SELECTION_FILE" | uniq)
     [[ -s "$candidates_file" ]] || break
 
     # Pass 2: plan each candidate with plan_item(), the same decision
@@ -637,7 +659,7 @@ resolve_dependencies() {
     elif [[ -t 0 ]] || [[ -n "${INSTALL_FORCE_INTERACTIVE:-}" ]]; then
       _head "dependencies"
       printf '  not yet selected:\n'
-      cut -f1 "$resolvable_file" | sed 's/^/    /'
+      cut -f1 "$resolvable_file" | uniq | sed 's/^/    /'
       printf 'Add them? [Y/n] '
       read -r reply
       case "$reply" in
@@ -645,12 +667,12 @@ resolve_dependencies() {
         *)        decision=skip ;;
       esac
     else
-      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f1 "$resolvable_file" | tr '\n' ' ')"
+      _fail "missing dependencies (pass --yes-deps to add or --no-deps to skip): $(cut -f1 "$resolvable_file" | uniq | tr '\n' ' ')"
       exit 1
     fi
 
     if [[ "$decision" == skip ]]; then
-      _warn "skipping dependencies (--no-deps): $(cut -f1 "$resolvable_file" | tr '\n' ' ')"
+      _warn "skipping dependencies (--no-deps): $(cut -f1 "$resolvable_file" | uniq | tr '\n' ' ')"
       break
     fi
 
@@ -704,12 +726,16 @@ apply_selection() {
     category="${asset%%/*}"
     src="$SRC/$src_rel"
     dest="$(resolve_root "$dest_spec")"
+    # fail closed: an unknown mode must never fall into the whole-directory (rm -rf) branch
+    case "$mode" in item|copy|merge) ;; *) _fail "malformed selection row for $asset"; exit 1 ;; esac
 
     if [[ $DRY_RUN -eq 1 ]]; then
       local note=""
       [[ "$transform" != "-" ]] && note="  (translated: $transform)"
       [[ "$mode" == merge ]] && note="  (merge mode not yet supported, would skip)"
-      if [[ -e "$dest" ]]; then
+      if [[ "$mode" == copy && ( -d "$dest" || -L "$dest" ) ]]; then
+        printf '  [dry-run] %-9s %s -> %s  (not a regular file, would skip)\n' "$category" "$src_rel" "$dest"
+      elif [[ -e "$dest" ]]; then
         printf '  [dry-run] %-9s %s -> %s  (exists, would skip; use --force to overwrite)\n' "$category" "$src_rel" "$dest"
       else
         printf '  [dry-run] %-9s %s -> %s%s\n' "$category" "$src_rel" "$dest" "$note"
@@ -729,7 +755,10 @@ apply_selection() {
       elif [[ -e "$dest" && $FORCE -ne 1 ]]; then
         _warn "skip (exists): $dest — use --force to overwrite"
       else
-        mkdir -p "$(dirname "$dest")"
+        if ! mkdir -p "$(dirname "$dest")" 2>/dev/null; then
+          _warn "skip (parent is not a directory): $dest"
+          continue
+        fi
         cp "$src" "$dest"
         record_write "$asset" "$dest_spec"
         _ok "${dest_spec#"$SCOPE_ROOT"/}"
